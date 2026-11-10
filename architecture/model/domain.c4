@@ -1,0 +1,348 @@
+// Предварительная доменная модель: поля и методы описывают понятия и правила, не реализацию классов.
+model {
+  extend notify.domain {
+    campaigns = domain 'Рассылки и доставка' {
+      campaign = domain 'Campaign' {
+        summary 'Рассылка и её жизненный цикл.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          ID uuid.UUID
+          TenantID uuid.UUID
+          ChannelID uuid.UUID
+          Content NotificationContent
+          Priority Priority // critical | high | normal
+          Status CampaignStatus // draft | scheduled | starting | started | completed | failed (предварительно)
+          ScheduledAt *time.Time
+          DeadlineAt *time.Time
+          CancelledAt *time.Time
+          RunID *uuid.UUID
+          Progress *CampaignProgress
+          ```
+
+          **Правила и операции:** создать рассылку; добавлять порции аудитории до запуска; запустить немедленно или запланировать, закрыв загрузку; зафиксировать отмену. Перед отправкой и повтором проверяются отмена и дедлайн. Новый `run_id` отсеивает устаревшие запуски.
+
+          TODO: согласовать состояния, переходы, итог отмены и дедлайна, а также правила обработки inline-рассылок.
+        '''
+      }
+      recipient = domain 'Recipient' {
+        summary 'Получатель по идентификатору или адресу.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          Type RecipientType // user_id | phone | email | push_token
+          Value string
+          ```
+
+          **Правила:** пользователь разрешается в адреса по выбранному каналу; анонимный адрес передаётся напрямую. При отсутствии пользователя или подходящего адреса отправка завершается ошибкой.
+
+          TODO: определить проверку адресов и применимость типов к каналам.
+        '''
+      }
+      batch = domain 'RecipientBatch' {
+        summary 'Порция получателей рассылки.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          ID uuid.UUID
+          CampaignID uuid.UUID
+          RecipientType RecipientType // user_id | phone | email | push_token
+          Recipients []string
+          ```
+
+          **Правила:** порции добавляются до запуска; при подготовке разворачиваются в задания доставки. TODO: согласовать ограничения размера и идемпотентность добавления.
+        '''
+      }
+      progress = domain 'CampaignProgress' {
+        summary 'Прогресс обработки рассылки.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          SourceBatchesTotal int
+          SourceBatchesFannedOut int
+          DeliveryTotal int
+          DeliveryProcessed int
+          DeliveryAcceptedCount int
+          DeliveryFailedCount int
+          ```
+
+          **Операции:** учитывать подготовленные порции и результаты заданий; определять завершение обработки. TODO: согласовать счётчики отменённых и просроченных заданий и правило завершения.
+        '''
+      }
+      work = domain 'DeliveryWork' {
+        summary 'Логическое задание доставки.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          DeliveryID uuid.UUID
+          NotificationID uuid.UUID
+          TenantID uuid.UUID
+          CampaignID *uuid.UUID
+          Recipient Recipient
+          ChannelID uuid.UUID
+          Priority Priority // critical | high | normal
+          RetryAttempt int
+          ```
+
+          **Правила:** перед отправкой проверяются ограничения, отмена и дедлайн; при временной ошибке возможно формирование повтора. TODO: уточнить классификацию ошибок.
+        '''
+      }
+      notification = domain 'Notification' {
+        summary 'Логическое уведомление и его статус в истории.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          ID uuid.UUID
+          TenantID uuid.UUID
+          Recipient Recipient
+          ChannelID uuid.UUID
+          CampaignID *uuid.UUID
+          Content NotificationContent
+          Status NotificationStatus // sent | delivered | read | cancelled
+          CreatedAt time.Time
+          AcceptedAt *time.Time
+          ```
+          Статус относится к записи истории; `accepted_at` заполняется после принятия провайдером.
+
+          **Правила:** идентификатор уведомления может существовать во время обработки; запись истории создаётся асинхронно после успешной отправки провайдеру либо с `cancelled` при отмене или истечении дедлайна без обращения к провайдеру. Предварительные статусы истории: `sent`, `delivered`, `read`, `cancelled`.
+
+          TODO: согласовать допустимые переходы, подтверждения доставки и историю для анонимных получателей.
+        '''
+      }
+      content = domain 'NotificationContent' {
+        summary 'Содержимое уведомления.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          Title *string
+          Body *string
+          ImageURL *string
+          Data map[string]string
+          ChannelData any
+          ```
+
+          **Правила:** содержимое должно соответствовать выбранному типу канала. TODO: определить форматы для SMS, email и push.
+        '''
+      }
+    }
+    channels = domain 'Каналы и провайдеры' {
+      channel = domain 'Channel' {
+        summary 'Настроенный канал отправки арендатора.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          ID uuid.UUID
+          TenantID uuid.UUID
+          ChannelKey string
+          ChannelType ChannelType // sms | push | email
+          ProviderID uuid.UUID
+          Status ChannelStatus // provisioning | active | disabled
+          ```
+
+          **Правила и операции:** канал принадлежит арендатору и использует одного провайдера; несколько каналов могут использовать одного провайдера. Канал можно активировать или отключить; его обработчики следуют состоянию канала. При создании рассылки через REST или Kafka канал выбирается по переданному ключу; без ключа сервис выбирает самый дешёвый подходящий канал указанного типа. TODO: определить расчёт стоимости, момент выбора и поведение, если подходящего канала нет.
+        '''
+      }
+      provider = domain 'Provider' {
+        summary 'Конфигурация провайдера доставки арендатора.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          ID uuid.UUID
+          TenantID uuid.UUID
+          ProviderType string
+          Settings any
+          Status ConfigurationStatus // active | disabled
+          RateLimitQPS int
+          RateLimitBurst int
+          CredentialsEncrypted string
+          ```
+
+          **Операции:** включить или отключить провайдера, изменить лимиты и учётные данные. TODO: определить хранение секретов и правила смены конфигурации.
+        '''
+      }
+      application = domain 'MobileApplication' {
+        summary 'Мобильное приложение для push-уведомлений.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          ID uuid.UUID
+          TenantID uuid.UUID
+          Platform MobilePlatform // android | ios
+          PackageName string
+          ProviderID *uuid.UUID
+          Status ConfigurationStatus // active | disabled
+          ```
+
+          **Операции:** подключить или отключить провайдера; связать приложение с каналом. TODO: согласовать совместимость и влияние смены провайдера.
+        '''
+      }
+    }
+    users = domain 'Пользователи и контакты' {
+      user = domain 'User' {
+        summary 'Локальное представление пользователя арендатора.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          TenantID uuid.UUID
+          UserID string
+          Status UserStatus // active | deleted
+          ```
+
+          **Операции:** создать или обновить проекцию и обработать удаление по внешним событиям. После запуска потребления событий Kafka существующие данные однократно загружаются SQL-скриптом из других баз данных.
+        '''
+      }
+      phone = domain 'UserPhone' {
+        summary 'Телефон пользователя и возможные сведения для маршрутизации.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          TenantID uuid.UUID
+          UserID string
+          Phone string
+          Operator *string
+          Region *string
+          UpdatedAt time.Time
+          ```
+
+          **Операции:** обновить или удалить телефон по событию внешней системы. Оператор и регион необязательны. TODO: определить источник и актуальность сведений, а также их возможное использование при выборе провайдера.
+        '''
+      }
+      email = domain 'UserEmail' {
+        summary 'Email пользователя и возможные сведения о почтовом сервисе.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          TenantID uuid.UUID
+          UserID string
+          Email string
+          MailService *string
+          UpdatedAt time.Time
+          ```
+
+          **Операции:** обновить или удалить email по событию внешней системы. Почтовый сервис необязателен. TODO: определить источник, актуальность и возможное применение сведений о сервисе.
+        '''
+      }
+      token = domain 'UserPushToken' {
+        summary 'Push-токен установки приложения.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          TenantID uuid.UUID
+          UserID string
+          MobileApplicationID uuid.UUID
+          InstallationID string
+          Token string
+          Status PushTokenStatus // active | inactive
+          UpdatedAt time.Time
+          ```
+
+          **Операции:** зарегистрировать, обновить или деактивировать токен. TODO: согласовать источник событий и защиту токенов.
+        '''
+      }
+    }
+    access = domain 'Арендаторы и доступ' {
+      tenant = domain 'Tenant' {
+        summary 'Арендатор сервиса уведомлений.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          ID uuid.UUID
+          Name string
+          Status ConfigurationStatus // active | disabled
+          RateLimitPerMinute int
+          ```
+
+          **Операции:** включить или отключить арендатора, изменить лимит. Настройки, каналы и данные принадлежат конкретному арендатору.
+        '''
+      }
+      key = domain 'TenantApiKey' {
+        summary 'Ключ доступа вызывающей системы.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          ID uuid.UUID
+          TenantID uuid.UUID
+          Name string
+          KeyHash string
+          CreatedAt time.Time
+          RevokedAt *time.Time
+          ```
+
+          **Операции:** выпустить и отозвать ключ; исходный секрет не хранится. TODO: согласовать права и процесс ротации.
+        '''
+      }
+    }
+    templates = domain 'Шаблоны' {
+      template = domain 'Template' {
+        summary 'Возможный шаблон уведомления арендатора.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          ID uuid.UUID
+          TenantID uuid.UUID
+          Name string
+          ChannelType ChannelType // sms | push | email
+          Content any
+          Version int
+          ```
+
+          TODO: уточнить необходимость шаблонов и их роль в сервисе.
+        '''
+      }
+    }
+  }
+
+  notify.domain.campaigns.campaign -> notify.domain.access.tenant 'Принадлежит арендатору'
+  notify.domain.campaigns.campaign -> notify.domain.channels.channel 'Использует канал'
+  notify.domain.campaigns.batch -> notify.domain.campaigns.campaign 'Принадлежит рассылке'
+  notify.domain.campaigns.batch -> notify.domain.campaigns.recipient 'Содержит получателей'
+  notify.domain.campaigns.progress -> notify.domain.campaigns.campaign 'Отражает прогресс'
+  notify.domain.campaigns.work -> notify.domain.campaigns.recipient 'Адресовано получателю'
+  notify.domain.campaigns.work -> notify.domain.channels.channel 'Доставляется через канал'
+  notify.domain.campaigns.work -> notify.domain.campaigns.notification 'Идентифицирует уведомление'
+  notify.domain.campaigns.notification -> notify.domain.campaigns.content 'Содержит данные'
+  notify.domain.channels.channel -> notify.domain.channels.provider 'Использует провайдера'
+  notify.domain.channels.application -> notify.domain.channels.provider 'Может использовать провайдера'
+  notify.domain.channels.channel -> notify.domain.channels.application 'Может поддерживать приложение'
+  notify.domain.users.user -> notify.domain.access.tenant 'Принадлежит арендатору'
+  notify.domain.users.phone -> notify.domain.users.user 'Принадлежит пользователю'
+  notify.domain.users.email -> notify.domain.users.user 'Принадлежит пользователю'
+  notify.domain.users.token -> notify.domain.users.user 'Принадлежит пользователю'
+  notify.domain.users.token -> notify.domain.channels.application 'Относится к приложению'
+  notify.domain.access.key -> notify.domain.access.tenant 'Принадлежит арендатору'
+  notify.domain.templates.template -> notify.domain.access.tenant 'Принадлежит арендатору'
+}
+
+views {
+  view domain_overview of notify.domain {
+    title 'Notify — доменная модель'
+    description 'Предварительные доменные понятия и правила. Типы записаны в нотации Go: uuid.UUID — идентификатор, time.Time — момент времени, указатель обозначает необязательное значение. Значения enum указаны в комментариях; неутверждённые значения и типы any требуют согласования.'
+    include *
+    autoLayout LeftRight
+  }
+  view domain_campaigns of notify.domain.campaigns {
+    title 'Домен — рассылки и доставка'
+    include *
+    autoLayout LeftRight
+  }
+  view domain_channels of notify.domain.channels {
+    title 'Домен — каналы и провайдеры'
+    include *
+    autoLayout LeftRight
+  }
+  view domain_users of notify.domain.users {
+    title 'Домен — пользователи и контакты'
+    include *
+    autoLayout LeftRight
+  }
+  view domain_access of notify.domain.access {
+    title 'Домен — арендаторы и доступ'
+    include *
+    autoLayout LeftRight
+  }
+  view domain_templates of notify.domain.templates {
+    title 'Домен — шаблоны'
+    include *
+    autoLayout LeftRight
+  }
+}

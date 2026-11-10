@@ -5,6 +5,12 @@ specification {
   element service {
     style { color indigo }
   }
+  element module {
+    style { shape component color primary }
+  }
+  element domain {
+    style { shape component color red }
+  }
   element database {
     style { shape cylinder color green }
   }

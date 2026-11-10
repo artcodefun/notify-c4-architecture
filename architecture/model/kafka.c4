@@ -57,7 +57,7 @@ model {
         '''
       }
       tokens = broker 'users.push-token.v1' {
-        summary 'Сервис пользователей → consumer Notify. Обновление или удаление push-токена. TODO: уточнить источник и состав данных.'
+        summary 'Сервис пользователей → consumer Notify. Обновление или удаление push-токена.'
         description '''
           **Пример сообщения — черновик:**
 
@@ -76,22 +76,23 @@ model {
         '''
       }
     }
-    commands = broker 'Внешние команды Notify' {
-      description 'Команды других сервисов на индивидуальные уведомления.'
-      send = broker 'notify.command.send.v1' {
-        summary 'Внешний сервис → consumer Notify. Команда на отправку одному пользователю по типу канала.'
+    campaign_requests = broker 'Внешнее управление рассылками' {
+      description 'Запросы других сервисов на создание inline-рассылок одному пользователю.'
+      send = broker 'notify.campaign.inline.create.v1' {
+        summary 'Внешний сервис → consumer Notify. Запрос на inline-рассылку одному пользователю по типу канала.'
         description '''
-          Сервис выбирает настроенный канал арендатора по типу sms, push или email. deadline_at необязателен. Если пользователя или адреса нет, отправка завершается ошибкой. TODO: согласовать правила выбора канала и представление результата индивидуальной команды.
+          Внешний сервис передаёт уникальный campaign_id; Notify использует его как идентификатор inline-рассылки на одного пользователя. Повтор того же запроса не должен создавать новую рассылку. Обязательный channel_type: sms, push или email. Необязательный channel_key задаёт конкретный канал арендатора; без него сервис выбирает самый дешёвый подходящий канал указанного типа. deadline_at необязателен. Если пользователя или адреса нет, отправка завершается ошибкой.
 
           **Пример сообщения — черновик:**
 
           ```json
           {
-            "command_id": "cmd-001",
+            "campaign_id": "018f6b7a-6d80-7ac1-9e15-c1261cd9b021",
             "tenant_id": "company-123",
             "user_id": "user-456",
-            "type": "notification.send",
+            "type": "campaign.inline.create",
             "channel_type": "sms",
+            "channel_key": "channel-sms-twilio-325",
             "deadline_at": "2026-11-10T13:00:00Z",
             "payload": {
               "title": "Заявка",
@@ -103,7 +104,7 @@ model {
       }
     }
     campaigns = broker 'Внутренние топики рассылок' {
-      description 'Запуск и подготовка заданий массовой рассылки. Scheduler сохраняет новый run_id в PostgreSQL и публикует запуск в Kafka; проверка fencing и восстановление повторяют запуск при сбоях. Это не единая транзакция PostgreSQL и Kafka. TODO: согласовать таймаут восстановления.'
+      description 'Запуск и подготовка заданий массовой рассылки. Scheduler сохраняет новый run_id в PostgreSQL и публикует запуск в Kafka; проверка fencing и восстановление повторяют запуск при сбоях. Это не единая транзакция PostgreSQL и Kafka.'
       start = broker 'notify.campaign.run.v1' {
         summary 'Планировщик → worker. Запуск рассылки после наступления времени отправки.'
         description '''
@@ -119,7 +120,7 @@ model {
         '''
       }
       batch = broker 'notify.campaign.batch.v1' {
-        summary 'Worker → worker. Подготовка порции аудитории. TODO: уточнить хранение порций.'
+        summary 'Worker → worker. Подготовка порции аудитории.'
         description '''
           **Пример сообщения — черновик:**
 
@@ -150,7 +151,7 @@ model {
       }
     }
     channels = broker 'Внутренние топики доставки' {
-      description 'Для каждого настроенного канала арендатора создаются три топика доставки по приоритетам и три топика повторов по интервалам. TODO: рассмотреть альтернативу с фиксированным количеством общих топиков доставки.'
+      description 'Для каждого настроенного канала арендатора создаются три топика доставки по приоритетам и три топика повторов по интервалам.'
       delivery_critical = broker 'notify.delivery.critical.{channel_id}' {
         summary 'Задания доставки приоритета critical для конкретного канала арендатора.'
         description '''
@@ -319,7 +320,7 @@ model {
         '''
       }
       stats = broker 'notify.campaign.stats.v1' {
-        summary 'Агрегированный снимок прогресса. TODO: определить способ хранения и обновления.'
+        summary 'Агрегированный снимок прогресса.'
         description '''
           **Пример сообщения — черновик:**
 
@@ -334,14 +335,14 @@ model {
           ```
         '''
       }
-      accepted = broker 'notify.notification.accepted.v1' {
-        summary 'Асинхронная запись уведомления в историю после принятия провайдером.'
+      history = broker 'notify.notification.history.v1' {
+        summary 'Асинхронная запись отправленного или отменённого уведомления в историю.'
         description '''
           **Пример сообщения — черновик:**
 
           ```json
           {
-            "type": "notification.accepted",
+            "type": "notification.history",
             "schema_version": 1,
             "payload": {
               "notification_id": "notification-001",
@@ -349,16 +350,17 @@ model {
               "user_id": "user-456",
               "channel_id": "channel-sms-1",
               "content": {"body": "Ваша заявка обработана"},
+              "status": "sent",
               "accepted_at": "2026-11-10T12:00:00Z"
             }
           }
           ```
 
-          После принятия провайдером создаётся запись истории со статусом sent; delivered и read могут поступить позже. TODO: согласовать дедупликацию, обновление статусов и допустимые подтверждения.
+          После принятия провайдером записывается sent; delivered и read могут поступить позже. При отмене или истечении дедлайна без отправки публикуется cancelled без accepted_at.
         '''
       }
       events = broker 'notify.delivery.events.v1' {
-        summary 'События результатов и попыток для аналитики. TODO: определить поток и загрузку в ClickHouse.'
+        summary 'События результатов и попыток для аналитики.'
         description '''
           **Пример сообщения — черновик:**
 
@@ -388,15 +390,17 @@ model {
   user_service -> kafka.user_events.tokens 'Публикует изменения'
   kafka.user_events.tokens -> notify.consumer 'Передаёт события'
   notify.consumer -> postgres 'Обновляет локальные данные пользователей и контактов'
-  clients -> kafka.commands.send 'Публикуют команды отправки'
-  kafka.commands.send -> notify.consumer 'Передаёт команды отправки'
+  clients -> kafka.campaign_requests.send 'Публикуют запросы inline-рассылок'
+  kafka.campaign_requests.send -> notify.consumer 'Передаёт запросы inline-рассылок'
   notify.scheduler -> kafka.campaigns.start 'Публикует задание запуска'
   kafka.campaigns.start -> notify.workers.campaign 'Передаёт задание запуска'
   notify.workers.campaign -> kafka.campaigns.batch 'Создают задания подготовки порций'
   kafka.campaigns.batch -> notify.workers.campaign 'Передаёт задания подготовки'
   notify.workers.campaign -> kafka.campaigns.fanout 'Публикуют задания разворачивания'
   kafka.campaigns.fanout -> notify.workers.campaign 'Передаёт задания разворачивания'
-  notify.channels -> kafka.channels 'Обеспечивает наличие топиков каналов'
+  notify.provisioner -> kafka.channels 'Создаёт и проверяет топики каналов' {
+    description 'При отключении канала топики автоматически не удаляются, сообщения остаются в Kafka до истечения срока хранения.'
+  }
   notify.workers.campaign -> kafka.channels.delivery_critical 'Публикуют задания доставки'
   kafka.channels.delivery_critical -> notify.workers.delivery 'Передаёт задания доставки'
   notify.workers.campaign -> kafka.channels.delivery_high 'Публикуют задания доставки'
@@ -417,12 +421,12 @@ model {
   kafka.statistics.progress -> notify.workers.progress 'Передаёт прогресс для агрегации'
   notify.workers.progress -> kafka.statistics.stats 'Публикуют снимки прогресса'
   kafka.statistics.stats -> notify.workers.progress 'Передаёт снимки для сохранения'
-  notify.workers.delivery -> kafka.statistics.accepted 'Публикуют принятые уведомления'
-  notify.workers.retry -> kafka.statistics.accepted 'Публикует принятые уведомления'
-  kafka.statistics.accepted -> notify.workers.history 'Передаёт уведомления для записи в историю'
+  notify.workers.delivery -> kafka.statistics.history 'Публикуют уведомления для истории'
+  notify.workers.retry -> kafka.statistics.history 'Публикует уведомления для истории'
+  kafka.statistics.history -> notify.workers.history 'Передаёт уведомления для записи в историю'
   notify.workers.delivery -> kafka.statistics.events 'Публикуют события доставки'
   notify.workers.retry -> kafka.statistics.events 'Публикует события доставки'
-  kafka.statistics.events -> notify.analytics 'Передаёт события для аналитики'
+  kafka.statistics.events -> notify.delivery_statistics 'Передаёт события для аналитики'
 }
 
 views {
@@ -438,8 +442,8 @@ views {
     include *
     autoLayout LeftRight
   }
-  view kafka_commands of kafka.commands {
-    title 'Kafka — Внешние команды Notify'
+  view kafka_campaign_requests of kafka.campaign_requests {
+    title 'Kafka — Внешнее управление рассылками'
     description 'Предварительные топики и примеры сообщений; контракты не согласованы.'
     include *
     autoLayout LeftRight

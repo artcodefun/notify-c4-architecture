@@ -11,7 +11,7 @@ model {
       api_keys = database 'tenant_api_keys' {
         summary 'Ключи доступа вызывающих систем.'
         description '''
-          **Предварительные поля:** `id`, `tenant_id`, `key_hash`, `status`, `created_at`, `revoked_at`. Храним хеш, а не исходное значение ключа.
+          **Предварительные поля:** `id`, `tenant_id`, `key_hash`, `created_at`, `revoked_at`. Храним хеш, а не исходное значение ключа.
         '''
       }
     }
@@ -19,7 +19,7 @@ model {
       providers = database 'providers' {
         summary 'Конфигурации провайдеров арендатора.'
         description '''
-          **Предварительные поля:** `id`, `tenant_id`, `provider_type`, `credentials_encrypted`, `settings`, `status`. TODO: определить хранение и ротацию секретов.
+          **Предварительные поля:** `id`, `tenant_id`, `provider_type`, `credentials_encrypted`, `settings`, `status`.
         '''
       }
       channels = database 'channels' {
@@ -45,25 +45,25 @@ model {
       users = database 'users' {
         summary 'Локальная проекция пользователей.'
         description '''
-          **Предварительные поля:** `tenant_id`, `user_id`, `status`, `updated_at`. Источник истины — внешний сервис пользователей. Начальная загрузка — однократное заполнение из внешних сервисов, далее обновления через Kafka. При отсутствии данных пользователя или подходящего адреса отправка завершается ошибкой. TODO: согласовать синхронизацию начальной загрузки и событий.
+          **Предварительные поля:** `tenant_id`, `user_id`, `status`, `updated_at`. Источник истины — внешний сервис пользователей. После запуска потребления событий Kafka существующие данные однократно загружаются SQL-скриптом из других баз данных. При отсутствии данных пользователя или подходящего адреса отправка завершается ошибкой.
         '''
       }
       phones = database 'user_phones' {
         summary 'Номера телефонов пользователей.'
         description '''
-          **Предварительные поля:** `id`, `tenant_id`, `user_id`, `phone`, `status`, `updated_at`. TODO: согласовать число адресов и политику хранения.
+          **Предварительные поля:** `id`, `tenant_id`, `user_id`, `phone`, `updated_at`.
         '''
       }
       emails = database 'user_emails' {
         summary 'Адреса электронной почты пользователей.'
         description '''
-          **Предварительные поля:** `id`, `tenant_id`, `user_id`, `email`, `status`, `updated_at`.
+          **Предварительные поля:** `id`, `tenant_id`, `user_id`, `email`, `updated_at`.
         '''
       }
       push_tokens = database 'user_push_tokens' {
         summary 'Устройства и актуальные push-токены.'
         description '''
-          **Предварительные поля:** `id`, `tenant_id`, `user_id`, `mobile_application_id`, `installation_id`, `token`, `status`, `updated_at`. TODO: согласовать защиту и обновление токенов.
+          **Предварительные поля:** `id`, `tenant_id`, `user_id`, `mobile_application_id`, `installation_id`, `token`, `status`, `updated_at`.
         '''
       }
     }
@@ -71,28 +71,28 @@ model {
       campaigns = database 'campaigns' {
         summary 'Состояние и настройки массовых рассылок.'
         description '''
-          **Предварительные поля:** `id`, `tenant_id`, `channel_id`, `status`, `priority`, `content`, `scheduled_at`, `deadline_at`, `cancelled_at`, `run_id`, `created_at`. Создаётся до отправки, аудитория загружается порциями, затем рассылка запускается. TODO: определить состояния, прогресс и гарантии обновления кэша.
+          **Предварительные поля:** `id`, `tenant_id`, `channel_id`, `status`, `priority`, `content`, `scheduled_at`, `deadline_at`, `cancelled_at`, `run_id`, `created_at`. Создаётся до отправки, аудитория загружается порциями, затем рассылка запускается.
         '''
       }
       batches = database 'campaign_recipient_batches' {
         summary 'Порции аудитории массовых рассылок.'
         description '''
-          **Предварительные поля:** `id`, `campaign_id`, `recipient_type`, `recipients`, `created_at`. Допустимые recipient_type: user_id, phone, email, push_token; recipients содержит идентификаторы или адреса соответствующего типа. TODO: определить размер, защиту и сроки хранения порций.
+          **Предварительные поля:** `id`, `campaign_id`, `recipient_type`, `recipients`, `created_at`. Допустимые recipient_type: user_id, phone, email, push_token; recipients содержит идентификаторы или адреса соответствующего типа.
         '''
       }
     }
     templates = database 'Шаблоны' {
-      description 'TODO: уточнить, как будут работать шаблоны уведомлений и где они будут храниться.'
+      description 'Возможная группа для хранения шаблонов и их версий.'
       templates = database 'templates' {
         summary 'Шаблоны уведомлений арендаторов.'
         description '''
-          **Предварительные поля:** `id`, `tenant_id`, `name`, `channel_type`, `status`, `created_at`, `updated_at`. TODO: подтвердить, что шаблоны хранятся в Notify.
+          **Предварительные поля:** `id`, `tenant_id`, `name`, `channel_type`, `created_at`, `updated_at`.
         '''
       }
       versions = database 'template_versions' {
         summary 'Версии шаблонов и содержимое.'
         description '''
-          **Предварительные поля:** `id`, `template_id`, `version`, `content`, `created_at`. TODO: решить, нужны ли версии и когда фиксируется содержимое.
+          **Предварительные поля:** `id`, `template_id`, `version`, `content`, `created_at`.
         '''
       }
     }
@@ -100,7 +100,7 @@ model {
       notifications = database 'notifications' {
         summary 'История уведомлений пользователя и доступные через API статусы.'
         description '''
-          **Предварительные поля:** `id`, `tenant_id`, `user_id`, `channel_id`, `campaign_id` (при наличии), `content`, `status`, `created_at`, `accepted_at`. Создаётся асинхронно после успешной отправки провайдеру; предварительные статусы sent, delivered, read. Ожидающие и неуспешные отправки в историю не записываются. TODO: определить подтверждения провайдеров, переходы и срок хранения.
+          **Предварительные поля:** `id`, `tenant_id`, `user_id`, `channel_id`, `campaign_id` (при наличии), `content`, `status`, `created_at`, `accepted_at`. Создаётся асинхронно после успешной отправки провайдеру или при отмене либо истечении дедлайна без отправки; статусы sent, delivered, read, cancelled. accepted_at отсутствует, если провайдеру сообщение не отправлялось. Ожидающие и другие неуспешные отправки в историю не записываются.
         '''
       }
     }
