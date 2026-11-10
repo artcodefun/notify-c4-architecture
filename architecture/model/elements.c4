@@ -1,0 +1,70 @@
+model {
+  clients = system 'Вызывающие системы' {
+    description 'Сервисы разных компаний: отправляют запросы на уведомления'
+  }
+  notify = system 'Notify' {
+    description 'Мультиарендный сервис доставки уведомлений'
+    api = service 'REST API' {
+      description 'Приём запросов и предоставление статусов'
+    }
+    consumer = service 'Kafka consumer' {
+      description 'Приём команд от вызывающих систем'
+    }
+    management = service 'Управление уведомлениями' {
+      description 'Проверка, шаблоны, маршрутизация и управление доставкой'
+    }
+    channels = service 'Управление каналами и провайдерами' {
+      description 'Управляет настройками каналов и провайдеров арендаторов, а также подготовкой топиков и обработчиков каналов.'
+    }
+    scheduler = service 'Планировщик рассылок' {
+      description 'Периодически ищет в PostgreSQL отложенные рассылки, время запуска которых наступило.'
+    }
+    workers = service 'Delivery workers' {
+      description 'Обрабатывают рассылки и задания доставки, повторы и результаты. TODO: уточнить состав воркеров.'
+    }
+    analytics = service 'Сбор аналитики' {
+      description 'Подготовка данных о доставке для аналитики; механизм предстоит определить'
+    }
+  }
+  kafka = broker 'Kafka' {
+    description 'Внешние команды и задания доставки; логическое представление'
+     icon tech:kafka-icon
+  }
+  postgres = database 'PostgreSQL' {
+    description 'История уведомлений, настройки арендаторов, рассылки, каналы, статусы отправок'
+    icon tech:postgresql
+  }
+  redis = database 'Redis' {
+    description 'Кэш и ограничение частоты запросов'
+    icon tech:redis
+  }
+  clickhouse = database 'ClickHouse' {
+    description 'Аналитические данные о доставке'
+    icon https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/clickhouse.svg
+  }
+  telemetry = observability 'Сбор телеметрии' {
+    description 'Метрики, логи и трассировки; например, OpenTelemetry Collector'
+  }
+  monitoring = observability 'Мониторинг' {
+    description 'Просмотр метрик и логов, оповещения; например, Grafana'
+  }
+  push = system 'Push-провайдеры' {
+    description 'Доставка мобильных push-уведомлений'
+  }
+  sms = system 'SMS-провайдеры' {
+    description 'Доставка SMS'
+  }
+  email = system 'Email-провайдеры' {
+    description 'Доставка электронной почты'
+  }
+
+}
+
+views {
+  view notify_details of notify {
+    title 'Notify — внутреннее устройство'
+    description 'Логические роли Notify и связанные системы; размещение и состав процессов пока не определены.'
+    include *
+    autoLayout LeftRight
+  }
+}

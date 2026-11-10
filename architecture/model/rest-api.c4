@@ -1,0 +1,679 @@
+// Черновая карта REST API: пути, модели и коды ответов не согласованы.
+model {
+  extend notify.api {
+    campaigns = service 'Рассылки' {
+      create = service 'POST /campaigns' {
+        summary 'Создать рассылку.'
+        description '''
+          TODO: согласовать поля, сроки и идемпотентность.
+
+          **Пример тела запроса:**
+
+          ```json
+          {
+            "channel": "channel-sms-1",
+            "payload": {
+              "body": "Ваша заявка обработана"
+            },
+            "priority": "normal"
+          }
+          ```
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "campaign_id": "campaign-001",
+            "status": "draft"
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      inline = service 'POST /campaigns/inline' {
+        summary 'Создать и запланировать небольшую рассылку.'
+        description '''
+          TODO: решить, нужен ли отдельный inline-сценарий и каковы его пределы.
+
+          **Пример тела запроса:**
+
+          ```json
+          {
+            "channel": "channel-sms-1",
+            "payload": {
+              "body": "Ваша заявка обработана"
+            },
+            "priority": "normal",
+            "recipients": [
+              "user-456"
+            ],
+            "scheduled_at": "2026-11-11T09:00:00Z"
+          }
+          ```
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "campaign_id": "campaign-001",
+            "status": "scheduled"
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      get = service 'GET /campaigns/{campaign_id}' {
+        summary 'Получить состояние и прогресс рассылки.'
+        description '''
+          TODO: определить статусы и состав прогресса.
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "campaign_id": "campaign-001",
+            "status": "sending",
+            "processed": 100,
+            "accepted": 98,
+            "failed": 2
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      batch = service 'POST /campaigns/{campaign_id}/recipients/batch' {
+        summary 'Добавить порцию аудитории.'
+        description '''
+          TODO: определить идемпотентность, ограничения и форматы анонимных получателей.
+
+          **Пример тела запроса:**
+
+          ```json
+          {
+            "recipient_type": "user_id",
+            "recipients": [
+              "user-456",
+              "user-789"
+            ]
+          }
+          ```
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "batch_id": "batch-001",
+            "accepted_count": 2
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      start = service 'POST /campaigns/{campaign_id}/start' {
+        summary 'Запустить или запланировать рассылку.'
+        description '''
+          TODO: определить поведение повторного запроса и допустимые переходы.
+
+          **Пример тела запроса:**
+
+          ```json
+          {
+            "scheduled_at": "2026-11-11T09:00:00Z"
+          }
+          ```
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "campaign_id": "campaign-001",
+            "status": "scheduled"
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      cancel = service 'POST /campaigns/{campaign_id}/cancel' {
+        summary 'Запросить отмену рассылки.'
+        description '''
+          TODO: согласовать отмену уже опубликованных и отправленных сообщений.
+
+          **Пример тела запроса:**
+
+          ```json
+          {}
+          ```
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "campaign_id": "campaign-001",
+            "status": "cancelling"
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+    }
+    history = service 'История уведомлений' {
+      list = service 'GET /users/{user_id}/notifications' {
+        summary 'Получить историю уведомлений пользователя.'
+        description '''
+          TODO: согласовать набор статусов, фильтры и пагинацию.
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "items": [
+              {
+                "notification_id": "notification-001",
+                "status": "accepted",
+                "channel": "channel-sms-1"
+              }
+            ],
+            "next_cursor": null
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      read = service 'POST /users/{user_id}/notifications/{notification_id}/read' {
+        summary 'Отметить уведомление прочитанным.'
+        description '''
+          TODO: подтвердить необходимость отметки прочтения для разных каналов.
+
+          **Пример тела запроса:**
+
+          ```json
+          {}
+          ```
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "notification_id": "notification-001",
+            "read": true
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+    }
+    channels = service 'Каналы' {
+      list = service 'GET /channels' {
+        summary 'Получить список каналов арендатора.'
+        description '''
+          TODO: согласовать отображаемые настройки и пагинацию.
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "items": [
+              {
+                "channel": "channel-sms-1",
+                "type": "sms",
+                "status": "active"
+              }
+            ]
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      create = service 'POST /channels' {
+        summary 'Создать канал уведомлений.'
+        description '''
+          TODO: определить статусы создания и привязку провайдеров.
+
+          **Пример тела запроса:**
+
+          ```json
+          {
+            "channel": "channel-sms-1",
+            "type": "sms",
+            "provider_id": "provider-001"
+          }
+          ```
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "channel": "channel-sms-1",
+            "status": "provisioning"
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      get = service 'GET /channels/{channel_id}' {
+        summary 'Получить настройки и состояние канала.'
+        description '''
+          TODO: согласовать идентификаторы канала в API.
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "channel": "channel-sms-1",
+            "type": "sms",
+            "status": "active"
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+    }
+    providers = service 'Провайдеры' {
+      list = service 'GET /providers' {
+        summary 'Получить список провайдеров арендатора.'
+        description '''
+          TODO: определить поля и пагинацию.
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "items": [
+              {
+                "provider_id": "provider-001",
+                "type": "sms",
+                "status": "active"
+              }
+            ]
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      create = service 'POST /providers' {
+        summary 'Создать конфигурацию провайдера.'
+        description '''
+          TODO: определить настройки и способ передачи секретов.
+
+          **Пример тела запроса:**
+
+          ```json
+          {
+            "type": "sms",
+            "name": "sms-provider",
+            "credentials": {}
+          }
+          ```
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "provider_id": "provider-001",
+            "status": "active"
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      get = service 'GET /providers/{provider_id}' {
+        summary 'Получить конфигурацию провайдера.'
+        description '''
+          Секреты в ответе не возвращаются. TODO: определить доступные поля.
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "provider_id": "provider-001",
+            "type": "sms",
+            "status": "active"
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+    }
+    applications = service 'Мобильные приложения' {
+      list = service 'GET /mobile-applications' {
+        summary 'Получить список мобильных приложений.'
+        description '''
+          TODO: согласовать поля.
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "items": [
+              {
+                "application_id": "app-001",
+                "platform": "android",
+                "package_name": "example.app"
+              }
+            ]
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      create = service 'POST /mobile-applications' {
+        summary 'Зарегистрировать мобильное приложение.'
+        description '''
+          TODO: определить настройки для платформ и провайдеров.
+
+          **Пример тела запроса:**
+
+          ```json
+          {
+            "platform": "android",
+            "package_name": "example.app"
+          }
+          ```
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "application_id": "app-001",
+            "status": "active"
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      get = service 'GET /mobile-applications/{application_id}' {
+        summary 'Получить настройки приложения.'
+        description '''
+          TODO: согласовать поля.
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "application_id": "app-001",
+            "platform": "android",
+            "package_name": "example.app"
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      provider_set = service 'PUT /mobile-applications/{application_id}/provider' {
+        summary 'Связать приложение с провайдером.'
+        description '''
+          TODO: определить правила смены провайдера.
+
+          **Пример тела запроса:**
+
+          ```json
+          {
+            "provider_id": "provider-001"
+          }
+          ```
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "application_id": "app-001",
+            "provider_id": "provider-001"
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      provider_unset = service 'DELETE /mobile-applications/{application_id}/provider' {
+        summary 'Отключить провайдера от приложения.'
+        description '''
+          TODO: определить влияние на каналы и существующие токены.
+
+          TODO: согласовать код и тело ответа.
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      channel_link = service 'PUT /channels/{channel_id}/mobile-applications/{application_id}' {
+        summary 'Добавить приложение в канал.'
+        description '''
+          TODO: определить правила проверки совместимости.
+
+          TODO: согласовать код и тело ответа.
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      channel_unlink = service 'DELETE /channels/{channel_id}/mobile-applications/{application_id}' {
+        summary 'Убрать приложение из канала.'
+        description '''
+          TODO: определить обработку уже созданных заданий.
+
+          TODO: согласовать код и тело ответа.
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+    }
+    admin = service 'Администрирование' {
+      tenants_list = service 'GET /internal/tenants' {
+        summary 'Получить список арендаторов.'
+        description '''
+          Внутренняя операция. TODO: согласовать модель доступа.
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "items": [
+              {
+                "tenant_id": "company-123",
+                "name": "Компания"
+              }
+            ]
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      tenants_create = service 'POST /internal/tenants' {
+        summary 'Создать арендатора.'
+        description '''
+          Внутренняя операция. TODO: согласовать права и процесс подключения.
+
+          **Пример тела запроса:**
+
+          ```json
+          {
+            "name": "Компания"
+          }
+          ```
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "tenant_id": "company-123",
+            "status": "active"
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      keys_create = service 'POST /internal/tenant-api-keys' {
+        summary 'Выпустить ключ доступа арендатора.'
+        description '''
+          Внутренняя операция. TODO: согласовать выпуск и однократный показ секрета.
+
+          **Пример тела запроса:**
+
+          ```json
+          {
+            "tenant_id": "company-123",
+            "name": "service-a"
+          }
+          ```
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "api_key_id": "key-001",
+            "api_key": "example-secret"
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      keys_revoke = service 'DELETE /internal/tenant-api-keys/{api_key_id}' {
+        summary 'Отозвать ключ доступа.'
+        description '''
+          Внутренняя операция. TODO: определить аудит и порядок отзыва.
+
+          TODO: согласовать код и тело ответа.
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+    }
+    templates = service 'Шаблоны' {
+      list = service 'GET /templates' {
+        summary 'Получить список шаблонов.'
+        description '''
+          TODO: уточнить необходимость и модель шаблонов.
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "items": [
+              {
+                "template_id": "template-001",
+                "name": "Заявка"
+              }
+            ]
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      create = service 'POST /templates' {
+        summary 'Создать шаблон.'
+        description '''
+          TODO: уточнить версии, переменные и жизненный цикл шаблонов.
+
+          **Пример тела запроса:**
+
+          ```json
+          {
+            "name": "Заявка",
+            "channel_type": "sms",
+            "content": "Ваша заявка обработана"
+          }
+          ```
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "template_id": "template-001"
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+      get = service 'GET /templates/{template_id}' {
+        summary 'Получить шаблон.'
+        description '''
+          TODO: уточнить модель и права доступа.
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "template_id": "template-001",
+            "name": "Заявка"
+          }
+          ```
+
+          Примеры предварительные; коды ответов и ошибки требуют согласования.
+        '''
+      }
+    }
+  }
+}
+
+views {
+  view rest_overview of notify.api {
+    title 'REST API — группы операций'
+    description 'Черновая карта API; контракты и границы доступа предстоит согласовать.'
+    include *
+    autoLayout LeftRight
+  }
+  view rest_campaigns of notify.api.campaigns {
+    title 'REST API — Рассылки'
+    description 'Предварительные операции и примеры; пути, права, ошибки и ответы не утверждены.'
+    include *
+    autoLayout LeftRight
+  }
+  view rest_history of notify.api.history {
+    title 'REST API — История уведомлений'
+    description 'Предварительные операции и примеры; пути, права, ошибки и ответы не утверждены.'
+    include *
+    autoLayout LeftRight
+    style read {
+      shape rectangle
+    }
+  }
+  view rest_channels of notify.api.channels {
+    title 'REST API — Каналы'
+    description 'Предварительные операции и примеры; пути, права, ошибки и ответы не утверждены.'
+    include *
+    autoLayout LeftRight
+  }
+  view rest_providers of notify.api.providers {
+    title 'REST API — Провайдеры'
+    description 'Предварительные операции и примеры; пути, права, ошибки и ответы не утверждены.'
+    include *
+    autoLayout LeftRight
+  }
+  view rest_applications of notify.api.applications {
+    title 'REST API — Мобильные приложения'
+    description 'Предварительные операции и примеры; пути, права, ошибки и ответы не утверждены.'
+    include *
+    autoLayout LeftRight
+  }
+  view rest_admin of notify.api.admin {
+    title 'REST API — Администрирование'
+    description 'Предварительные операции и примеры; пути, права, ошибки и ответы не утверждены.'
+    include *
+    autoLayout LeftRight
+  }
+  view rest_templates of notify.api.templates {
+    title 'REST API — Шаблоны'
+    description 'Предварительные операции и примеры; пути, права, ошибки и ответы не утверждены.'
+    include *
+    autoLayout LeftRight
+  }
+}

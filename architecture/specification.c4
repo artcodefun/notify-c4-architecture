@@ -1,0 +1,18 @@
+specification {
+  element system {
+    style { color muted }
+  }
+  element service {
+    style { color indigo }
+  }
+  element database {
+    style { shape cylinder color green }
+  }
+  element broker {
+    style { shape queue color amber }
+  }
+  element observability {
+    style { color gray }
+  }
+}
+

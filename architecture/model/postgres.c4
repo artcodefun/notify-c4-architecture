@@ -1,0 +1,170 @@
+// Предварительная логическая модель: поля и связи подлежат согласованию.
+model {
+  extend postgres {
+    access = database 'Арендаторы и доступ' {
+      tenants = database 'tenants' {
+        summary 'Компании и их настройки.'
+        description '''
+          **Предварительные поля:** `id`, `name`, `status`, `created_at`, `updated_at`.
+        '''
+      }
+      api_keys = database 'tenant_api_keys' {
+        summary 'Ключи доступа вызывающих систем.'
+        description '''
+          **Предварительные поля:** `id`, `tenant_id`, `key_hash`, `status`, `created_at`, `revoked_at`. Храним хеш, а не исходное значение ключа.
+        '''
+      }
+    }
+    channels = database 'Каналы и провайдеры' {
+      providers = database 'providers' {
+        summary 'Конфигурации провайдеров арендатора.'
+        description '''
+          **Предварительные поля:** `id`, `tenant_id`, `provider_type`, `credentials_encrypted`, `settings`, `status`. TODO: определить хранение и ротацию секретов.
+        '''
+      }
+      channels = database 'channels' {
+        summary 'Настроенные каналы уведомлений.'
+        description '''
+          **Предварительные поля:** `id`, `tenant_id`, `channel_key`, `channel_type`, `provider_id`, `status`. TODO: уточнить маршрутизацию к нескольким провайдерам.
+        '''
+      }
+      applications = database 'mobile_applications' {
+        summary 'Мобильные приложения арендаторов.'
+        description '''
+          **Предварительные поля:** `id`, `tenant_id`, `provider_id`, `platform`, `package_name`, `status`.
+        '''
+      }
+      channel_apps = database 'channel_mobile_applications' {
+        summary 'Связи каналов с мобильными приложениями.'
+        description '''
+          **Предварительные поля:** `channel_id`, `mobile_application_id`.
+        '''
+      }
+    }
+    users = database 'Пользователи и адреса' {
+      users = database 'users' {
+        summary 'Локальная проекция пользователей.'
+        description '''
+          **Предварительные поля:** `tenant_id`, `user_id`, `status`, `updated_at`. Источник истины — внешний сервис пользователей.
+        '''
+      }
+      phones = database 'user_phones' {
+        summary 'Номера телефонов пользователей.'
+        description '''
+          **Предварительные поля:** `id`, `tenant_id`, `user_id`, `phone`, `status`, `updated_at`. TODO: согласовать число адресов и политику хранения.
+        '''
+      }
+      emails = database 'user_emails' {
+        summary 'Адреса электронной почты пользователей.'
+        description '''
+          **Предварительные поля:** `id`, `tenant_id`, `user_id`, `email`, `status`, `updated_at`.
+        '''
+      }
+      push_tokens = database 'user_push_tokens' {
+        summary 'Устройства и актуальные push-токены.'
+        description '''
+          **Предварительные поля:** `id`, `tenant_id`, `user_id`, `mobile_application_id`, `installation_id`, `token`, `status`, `updated_at`. TODO: согласовать защиту и обновление токенов.
+        '''
+      }
+    }
+    campaigns = database 'Рассылки и аудитория' {
+      campaigns = database 'campaigns' {
+        summary 'Состояние и настройки массовых рассылок.'
+        description '''
+          **Предварительные поля:** `id`, `tenant_id`, `channel_id`, `status`, `priority`, `content`, `scheduled_at`, `deadline_at`, `run_id`, `created_at`. TODO: определить состояния, отмену, дедлайн и прогресс.
+        '''
+      }
+      batches = database 'campaign_recipient_batches' {
+        summary 'Порции аудитории массовых рассылок.'
+        description '''
+          **Предварительные поля:** `id`, `campaign_id`, `recipient_type`, `recipients`, `created_at`. TODO: определить формат, размер и хранение анонимных получателей.
+        '''
+      }
+    }
+    templates = database 'Шаблоны' {
+      description 'TODO: уточнить, как будут работать шаблоны уведомлений и где они будут храниться.'
+      templates = database 'templates' {
+        summary 'Шаблоны уведомлений арендаторов.'
+        description '''
+          **Предварительные поля:** `id`, `tenant_id`, `name`, `channel_type`, `status`, `created_at`, `updated_at`. TODO: подтвердить, что шаблоны хранятся в Notify.
+        '''
+      }
+      versions = database 'template_versions' {
+        summary 'Версии шаблонов и содержимое.'
+        description '''
+          **Предварительные поля:** `id`, `template_id`, `version`, `content`, `created_at`. TODO: решить, нужны ли версии и когда фиксируется содержимое.
+        '''
+      }
+    }
+    history = database 'История сообщений' {
+      notifications = database 'notifications' {
+        summary 'История уведомлений пользователя и доступные через API статусы.'
+        description '''
+          **Предварительные поля:** `id`, `tenant_id`, `user_id`, `channel_id`, `campaign_id` (при наличии), `content`, `status`, `created_at`, `accepted_at`. Создаётся асинхронно после успешной отправки; TODO: определить точное значение успеха, статусы, срок хранения и обновления.
+        '''
+      }
+    }
+  }
+
+  postgres.access.api_keys -> postgres.access.tenants 'Принадлежат арендатору'
+  postgres.channels.providers -> postgres.access.tenants 'Принадлежат арендатору'
+  postgres.channels.channels -> postgres.channels.providers 'Используют провайдера'
+  postgres.users.users -> postgres.access.tenants 'Принадлежат арендатору'
+  postgres.users.phones -> postgres.users.users 'Принадлежат пользователю'
+  postgres.users.emails -> postgres.users.users 'Принадлежат пользователю'
+  postgres.users.push_tokens -> postgres.users.users 'Принадлежат пользователю'
+  postgres.users.push_tokens -> postgres.channels.applications 'Относятся к приложению'
+  postgres.channels.channel_apps -> postgres.channels.applications 'Связывает приложение'
+  postgres.channels.channel_apps -> postgres.channels.channels 'Связывает канал'
+  postgres.campaigns.campaigns -> postgres.channels.channels 'Используют канал'
+  postgres.campaigns.batches -> postgres.campaigns.campaigns 'Принадлежат рассылке'
+  postgres.templates.versions -> postgres.templates.templates 'Принадлежат шаблону'
+  postgres.history.notifications -> postgres.users.users 'История пользователя'
+  postgres.history.notifications -> postgres.channels.channels 'Отправлены через канал'
+  postgres.history.notifications -> postgres.campaigns.campaigns 'Могут относиться к рассылке'
+}
+
+views {
+  view postgres_overview of postgres {
+    title 'PostgreSQL — группы таблиц'
+    description 'Логическая структура данных; состав таблиц и поля предварительные.'
+    include *
+    autoLayout LeftRight
+  }
+  view postgres_access of postgres.access {
+    title 'PostgreSQL — Арендаторы и доступ'
+    description 'Черновые таблицы и поля; типы, индексы и ограничения предстоит согласовать.'
+    include *
+    autoLayout LeftRight
+  }
+  view postgres_channels of postgres.channels {
+    title 'PostgreSQL — Каналы и провайдеры'
+    description 'Черновые таблицы и поля; типы, индексы и ограничения предстоит согласовать.'
+    include *
+    autoLayout LeftRight
+  }
+  view postgres_users of postgres.users {
+    title 'PostgreSQL — Пользователи и адреса'
+    description 'Черновые таблицы и поля; типы, индексы и ограничения предстоит согласовать.'
+    include *
+    autoLayout LeftRight
+  }
+  view postgres_campaigns of postgres.campaigns {
+    title 'PostgreSQL — Рассылки и аудитория'
+    description 'Черновые таблицы и поля; типы, индексы и ограничения предстоит согласовать.'
+    include *
+    autoLayout LeftRight
+  }
+  view postgres_templates of postgres.templates {
+    title 'PostgreSQL — Шаблоны'
+    description 'Черновые таблицы и поля; типы, индексы и ограничения предстоит согласовать.'
+    include *
+    autoLayout LeftRight
+  }
+  view postgres_history of postgres.history {
+    title 'PostgreSQL — История сообщений'
+    description 'Черновые таблицы и поля; типы, индексы и ограничения предстоит согласовать.'
+    include *
+    autoLayout LeftRight
+  }
+}

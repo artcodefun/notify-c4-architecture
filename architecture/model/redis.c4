@@ -1,0 +1,76 @@
+// Логические назначения Redis; форматы ключей и политики хранения предстоит согласовать.
+model {
+  extend redis {
+    cache = database 'Кэш данных' {
+      description 'Кэш для уменьшения чтений PostgreSQL. TODO: согласовать TTL, инвалидацию и поведение при недоступности Redis.'
+      tenants = database 'Арендаторы' {
+        summary 'Кэш настроек и состояния арендаторов.'
+        description 'TODO: определить состав полей и обновление кэша при изменении или отключении арендатора.'
+      }
+      channels = database 'Каналы' {
+        summary 'Кэш настроек каналов арендаторов.'
+        description 'TODO: определить инвалидацию при изменении и отключении канала.'
+      }
+      providers = database 'Провайдеры' {
+        summary 'Кэш конфигурации провайдеров.'
+        description 'TODO: определить состав кэша, защиту секретов и обновление при ротации настроек.'
+      }
+      applications = database 'Мобильные приложения' {
+        summary 'Кэш настроек мобильных приложений.'
+        description 'TODO: определить инвалидацию при изменении приложения или его связей.'
+      }
+      campaigns = database 'Активные рассылки' {
+        summary 'Кэш данных выполняющихся рассылок с TTL.'
+        description 'Позволяет воркерам реже читать данные активных рассылок из PostgreSQL. TODO: согласовать TTL, инвалидацию при изменении или отмене рассылки и поведение при промахе кэша.'
+      }
+      templates = database 'Шаблоны — под вопросом' {
+        summary 'Возможный кэш шаблонов и их версий.'
+        description 'TODO: оценить необходимость кэширования после выбора механизма шаблонов.'
+      }
+      users = database 'Пользователи — под вопросом' {
+        summary 'Возможный кэш данных пользователей и контактов.'
+        description 'TODO: оценить пользу, актуальность и защиту персональных данных; состав и сроки хранения не согласованы.'
+      }
+    }
+    limits = database 'Ограничение скорости' {
+      description 'Распределённые token bucket на уровнях арендатора и провайдера. Разрешения списываются из обоих атомарно одной Lua-операцией с использованием времени Redis. TODO: определить обработку недоступности Redis и особенности разных каналов.'
+      tenant = database 'Лимиты арендаторов' {
+        summary 'Общая квота арендатора: распределённый token bucket.'
+        description 'Ключ: tenant:{tenant_id}. Квота в минуту переводится в скорость в секунду; bucket пополняется непрерывно. TODO: согласовать значения квот для Notify.'
+      }
+      provider = database 'Лимиты провайдеров' {
+        summary 'Квота экземпляра провайдера: распределённый token bucket.'
+        description 'Ключ: provider:{provider_id}. Скорость QPS и burst задаются конфигурацией провайдера. При нехватке разрешений воркер ждёт доступности; ответ 429 и Retry-After учитываются при планировании повтора. TODO: согласовать общую блокировку провайдера между воркерами и особенности каналов.'
+      }
+    }
+  }
+
+  notify.management -> redis.cache 'Использует кэш настроек'
+  notify.channels -> redis.cache 'Обновляет или инвалидирует кэш настроек'
+  notify.workers.campaign -> redis.cache.campaigns 'Использует кэш активных рассылок'
+  notify.workers.delivery -> redis.cache 'Читает кэш настроек и активных рассылок'
+  notify.workers.retry -> redis.cache 'Читает кэш настроек доставки'
+  notify.workers.delivery -> redis.limits 'Проверяет лимиты'
+  notify.workers.retry -> redis.limits 'Проверяет лимиты'
+}
+
+views {
+  view redis_overview of redis {
+    title 'Redis — назначения'
+    description 'Логические данные в Redis; детали хранения и политики предстоит согласовать.'
+    include *
+    autoLayout LeftRight
+  }
+  view redis_cache of redis.cache {
+    title 'Redis — кэш данных'
+    description 'Предполагаемые кэши; шаблоны и пользователи пока под вопросом.'
+    include *
+    autoLayout LeftRight
+  }
+  view redis_limits of redis.limits {
+    title 'Redis — ограничение скорости'
+    description 'Двухуровневый распределённый token bucket; параметры и поведение при сбоях предстоит согласовать.'
+    include *
+    autoLayout LeftRight
+  }
+}

@@ -1,0 +1,8 @@
+views {
+  view context {
+    title 'Notify — контекст системы'
+    description 'Внешние интеграции и участники. Черновик.'
+    include clients, user_service, notify, kafka, postgres, push, sms, email, clickhouse, redis, telemetry, monitoring
+    autoLayout LeftRight
+  }
+}

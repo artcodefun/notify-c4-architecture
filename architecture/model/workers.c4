@@ -1,0 +1,41 @@
+// Предварительные логические роли: физическое развёртывание и детали сценариев не определены.
+model {
+  extend notify.workers {
+    campaign = service 'Подготовка рассылок' {
+      description 'Запускает обработку рассылки, подготавливает аудиторию порциями и создаёт задания доставки. TODO: уточнить этапы подготовки и обработку отмены.'
+    }
+    delivery = service 'Доставка уведомлений' {
+      description 'Читает задания канала, проверяет ограничения и отправляет сообщения провайдерам; публикует результаты или задания на повтор.'
+    }
+    retry = service 'Повторные попытки' {
+      description 'Читает отложенные задания и повторяет отправку после наступления нужного времени. TODO: уточнить политику повторов и сроки.'
+    }
+    progress = service 'Агрегация прогресса' {
+      description 'Собирает результаты доставки, формирует прогресс рассылок и обновляет его в PostgreSQL.'
+    }
+    history = service 'Запись истории уведомлений' {
+      description 'Асинхронно сохраняет историю после принятия уведомления провайдером. TODO: определить отображение ожидающих и неуспешных уведомлений.'
+    }
+  }
+
+  notify.workers.campaign -> postgres 'Читает рассылки и порции аудитории'
+  notify.workers.delivery -> postgres 'Читает настройки, адреса и содержимое'
+  notify.workers.retry -> postgres 'Читает настройки, адреса и содержимое'
+  notify.workers.delivery -> push 'Отправляет push'
+  notify.workers.delivery -> sms 'Отправляет SMS'
+  notify.workers.delivery -> email 'Отправляет письма'
+  notify.workers.retry -> push 'Повторяет push'
+  notify.workers.retry -> sms 'Повторяет SMS'
+  notify.workers.retry -> email 'Повторяет письма'
+  notify.workers.progress -> postgres 'Обновляет прогресс рассылок'
+  notify.workers.history -> postgres 'Сохраняет историю уведомлений'
+}
+
+views {
+  view worker_details of notify.workers {
+    title 'Notify — роли воркеров'
+    description 'Предварительные логические роли; число процессов и конкретные сценарии предстоит согласовать.'
+    include *
+    autoLayout LeftRight
+  }
+}

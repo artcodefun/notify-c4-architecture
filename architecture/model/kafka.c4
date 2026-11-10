@@ -1,0 +1,462 @@
+// Черновик: имена, структуры и топология подлежат согласованию. JSON — примеры, не контракты.
+model {
+  user_service = system 'Сервис пользователей' {
+    description 'Источник данных о пользователях и их контактах для Notify.'
+  }
+  extend kafka {
+    user_events = broker 'Внешние события пользователей' {
+      description 'Сервис пользователей публикует изменения; Notify поддерживает локальную проекцию.'
+      lifecycle = broker 'users.lifecycle.v1' {
+        summary 'Сервис пользователей → consumer Notify. Создание, изменение или удаление пользователя.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "event_id": "evt-001",
+            "tenant_id": "company-123",
+            "occurred_at": "2026-11-10T12:00:00Z",
+            "type": "user.created",
+            "user_id": "user-456"
+          }
+          ```
+        '''
+      }
+      phones = broker 'users.phone.v1' {
+        summary 'Сервис пользователей → consumer Notify. Изменение или удаление телефона.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "event_id": "evt-001",
+            "tenant_id": "company-123",
+            "occurred_at": "2026-11-10T12:00:00Z",
+            "type": "user.phone.updated",
+            "user_id": "user-456",
+            "phone": "+15550102030"
+          }
+          ```
+        '''
+      }
+      emails = broker 'users.email.v1' {
+        summary 'Сервис пользователей → consumer Notify. Изменение или удаление email.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "event_id": "evt-001",
+            "tenant_id": "company-123",
+            "occurred_at": "2026-11-10T12:00:00Z",
+            "type": "user.email.updated",
+            "user_id": "user-456",
+            "email": "user@example.com"
+          }
+          ```
+        '''
+      }
+      tokens = broker 'users.push-token.v1' {
+        summary 'Сервис пользователей → consumer Notify. Обновление или удаление push-токена. TODO: уточнить источник и состав данных.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "event_id": "evt-001",
+            "tenant_id": "company-123",
+            "occurred_at": "2026-11-10T12:00:00Z",
+            "type": "user.push_token.updated",
+            "user_id": "user-456",
+            "installation_id": "device-789",
+            "platform": "android",
+            "token": "example-token"
+          }
+          ```
+        '''
+      }
+    }
+    commands = broker 'Внешние команды Notify' {
+      description 'Команды других сервисов на индивидуальные уведомления.'
+      send = broker 'notify.command.send.v1' {
+        summary 'Внешний сервис → consumer Notify. Команда на отправку одному пользователю.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "command_id": "cmd-001",
+            "tenant_id": "company-123",
+            "user_id": "user-456",
+            "type": "notification.send",
+            "channel": "channel-sms-1",
+            "payload": {
+              "title": "Заявка",
+              "body": "Ваша заявка обработана"
+            }
+          }
+          ```
+        '''
+      }
+    }
+    campaigns = broker 'Внутренние топики рассылок' {
+      description 'Запуск и подготовка заданий массовой рассылки.'
+      start = broker 'notify.campaign.run.v1' {
+        summary 'Планировщик → worker. Запуск рассылки после наступления времени отправки.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "campaign_id": "campaign-001",
+            "tenant_id": "company-123",
+            "run_id": "run-001"
+          }
+          ```
+        '''
+      }
+      batch = broker 'notify.campaign.batch.v1' {
+        summary 'Worker → worker. Подготовка порции аудитории. TODO: уточнить хранение порций.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "campaign_id": "campaign-001",
+            "tenant_id": "company-123",
+            "run_id": "run-001",
+            "batch_id": "batch-001"
+          }
+          ```
+        '''
+      }
+      fanout = broker 'notify.campaign.fanout.v1' {
+        summary 'Worker → worker. Разворачивание порции в отдельные задания доставки.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "campaign_id": "campaign-001",
+            "tenant_id": "company-123",
+            "run_id": "run-001",
+            "batch_id": "batch-001"
+          }
+          ```
+        '''
+      }
+    }
+    channels = broker 'Внутренние топики доставки' {
+      description 'Для каждого настроенного канала арендатора создаются три топика доставки по приоритетам и три топика повторов по интервалам. TODO: рассмотреть альтернативу с фиксированным количеством общих топиков доставки.'
+      delivery_critical = broker 'notify.delivery.critical.{channel_id}' {
+        summary 'Задания доставки приоритета critical для конкретного канала арендатора.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "type": "delivery_work",
+            "schema_version": 1,
+            "payload": {
+              "schema_version": 1,
+              "delivery_id": "delivery-001",
+              "notification_id": "notification-001",
+              "campaign_id": "campaign-001",
+              "tenant_id": "company-123",
+              "user_id": "user-456",
+              "channel_id": "channel-sms-1",
+              "priority": "critical",
+              "retry_attempt": 0
+            }
+          }
+          ```
+        '''
+      }
+      delivery_high = broker 'notify.delivery.high.{channel_id}' {
+        summary 'Задания доставки приоритета high для конкретного канала арендатора.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "type": "delivery_work",
+            "schema_version": 1,
+            "payload": {
+              "schema_version": 1,
+              "delivery_id": "delivery-001",
+              "notification_id": "notification-001",
+              "campaign_id": "campaign-001",
+              "tenant_id": "company-123",
+              "user_id": "user-456",
+              "channel_id": "channel-sms-1",
+              "priority": "high",
+              "retry_attempt": 0
+            }
+          }
+          ```
+        '''
+      }
+      delivery_normal = broker 'notify.delivery.normal.{channel_id}' {
+        summary 'Задания доставки приоритета normal для конкретного канала арендатора.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "type": "delivery_work",
+            "schema_version": 1,
+            "payload": {
+              "schema_version": 1,
+              "delivery_id": "delivery-001",
+              "notification_id": "notification-001",
+              "campaign_id": "campaign-001",
+              "tenant_id": "company-123",
+              "user_id": "user-456",
+              "channel_id": "channel-sms-1",
+              "priority": "normal",
+              "retry_attempt": 0
+            }
+          }
+          ```
+        '''
+      }
+      retry_1m = broker 'notify.retry.1m.{channel_id}' {
+        summary 'Повторные попытки для конкретного канала; интервал 1m.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "type": "retry_work",
+            "schema_version": 1,
+            "payload": {
+              "schema_version": 1,
+              "delivery_id": "delivery-001",
+              "notification_id": "notification-001",
+              "campaign_id": "campaign-001",
+              "tenant_id": "company-123",
+              "user_id": "user-456",
+              "channel_id": "channel-sms-1",
+              "priority": "normal",
+              "retry_attempt": 1,
+              "due_at": "2026-11-10T12:01:00Z"
+            }
+          }
+          ```
+        '''
+      }
+      retry_5m = broker 'notify.retry.5m.{channel_id}' {
+        summary 'Повторные попытки для конкретного канала; интервал 5m.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "type": "retry_work",
+            "schema_version": 1,
+            "payload": {
+              "schema_version": 1,
+              "delivery_id": "delivery-001",
+              "notification_id": "notification-001",
+              "campaign_id": "campaign-001",
+              "tenant_id": "company-123",
+              "user_id": "user-456",
+              "channel_id": "channel-sms-1",
+              "priority": "normal",
+              "retry_attempt": 1,
+              "due_at": "2026-11-10T12:05:00Z"
+            }
+          }
+          ```
+        '''
+      }
+      retry_30m = broker 'notify.retry.30m.{channel_id}' {
+        summary 'Повторные попытки для конкретного канала; интервал 30m.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "type": "retry_work",
+            "schema_version": 1,
+            "payload": {
+              "schema_version": 1,
+              "delivery_id": "delivery-001",
+              "notification_id": "notification-001",
+              "campaign_id": "campaign-001",
+              "tenant_id": "company-123",
+              "user_id": "user-456",
+              "channel_id": "channel-sms-1",
+              "priority": "normal",
+              "retry_attempt": 1,
+              "due_at": "2026-11-10T12:30:00Z"
+            }
+          }
+          ```
+        '''
+      }
+    }
+    statistics = broker 'Внутренние топики статистики' {
+      description 'Прогресс рассылок и события доставки для аналитики.'
+      progress = broker 'notify.campaign.progress.v1' {
+        summary 'Worker → агрегатор: изменения прогресса рассылки.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "event_id": "evt-002",
+            "tenant_id": "company-123",
+            "campaign_id": "campaign-001",
+            "type": "delivery.completed",
+            "accepted_delta": 1,
+            "failed_delta": 0
+          }
+          ```
+        '''
+      }
+      stats = broker 'notify.campaign.stats.v1' {
+        summary 'Агрегированный снимок прогресса. TODO: определить способ хранения и обновления.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "tenant_id": "company-123",
+            "campaign_id": "campaign-001",
+            "processed": 100,
+            "accepted": 98,
+            "failed": 2
+          }
+          ```
+        '''
+      }
+      accepted = broker 'notify.notification.accepted.v1' {
+        summary 'Асинхронная запись уведомления в историю после принятия провайдером.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "type": "notification.accepted",
+            "schema_version": 1,
+            "payload": {
+              "notification_id": "notification-001",
+              "tenant_id": "company-123",
+              "user_id": "user-456",
+              "channel_id": "channel-sms-1",
+              "content": {"body": "Ваша заявка обработана"},
+              "accepted_at": "2026-11-10T12:00:00Z"
+            }
+          }
+          ```
+
+          TODO: согласовать определение успеха, дедупликацию и обновление статусов.
+        '''
+      }
+      events = broker 'notify.delivery.events.v1' {
+        summary 'События попыток для аналитики. TODO: определить поток и загрузку в ClickHouse.'
+        description '''
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "event_id": "evt-001",
+            "tenant_id": "company-123",
+            "occurred_at": "2026-11-10T12:00:00Z",
+            "type": "delivery.failed",
+            "delivery_id": "delivery-002",
+            "channel": "sms",
+            "attempt": 1,
+            "failure_reason": "provider_unavailable"
+          }
+          ```
+        '''
+      }
+    }
+  }
+
+  user_service -> kafka.user_events.lifecycle 'Публикует изменения'
+  kafka.user_events.lifecycle -> notify.consumer 'Передаёт события'
+  user_service -> kafka.user_events.phones 'Публикует изменения'
+  kafka.user_events.phones -> notify.consumer 'Передаёт события'
+  user_service -> kafka.user_events.emails 'Публикует изменения'
+  kafka.user_events.emails -> notify.consumer 'Передаёт события'
+  user_service -> kafka.user_events.tokens 'Публикует изменения'
+  kafka.user_events.tokens -> notify.consumer 'Передаёт события'
+  notify.consumer -> postgres 'Обновляет локальные данные пользователей и контактов'
+  clients -> kafka.commands.send 'Публикуют команды отправки'
+  kafka.commands.send -> notify.consumer 'Передаёт команды отправки'
+  notify.scheduler -> kafka.campaigns.start 'Публикует задание запуска'
+  kafka.campaigns.start -> notify.workers.campaign 'Передаёт задание запуска'
+  notify.workers.campaign -> kafka.campaigns.batch 'Создают задания подготовки порций'
+  kafka.campaigns.batch -> notify.workers.campaign 'Передаёт задания подготовки'
+  notify.workers.campaign -> kafka.campaigns.fanout 'Публикуют задания разворачивания'
+  kafka.campaigns.fanout -> notify.workers.campaign 'Передаёт задания разворачивания'
+  notify.channels -> kafka.channels 'Обеспечивает наличие топиков каналов'
+  notify.workers.campaign -> kafka.channels.delivery_critical 'Публикуют задания доставки'
+  kafka.channels.delivery_critical -> notify.workers.delivery 'Передаёт задания доставки'
+  notify.workers.campaign -> kafka.channels.delivery_high 'Публикуют задания доставки'
+  kafka.channels.delivery_high -> notify.workers.delivery 'Передаёт задания доставки'
+  notify.workers.campaign -> kafka.channels.delivery_normal 'Публикуют задания доставки'
+  kafka.channels.delivery_normal -> notify.workers.delivery 'Передаёт задания доставки'
+  notify.workers.delivery -> kafka.channels.retry_1m 'Публикуют задания на повтор'
+  kafka.channels.retry_1m -> notify.workers.retry 'Передаёт задания на повтор'
+  notify.workers.retry -> kafka.channels.retry_1m 'Публикует последующие повторы'
+  notify.workers.delivery -> kafka.channels.retry_5m 'Публикуют задания на повтор'
+  kafka.channels.retry_5m -> notify.workers.retry 'Передаёт задания на повтор'
+  notify.workers.retry -> kafka.channels.retry_5m 'Публикует последующие повторы'
+  notify.workers.delivery -> kafka.channels.retry_30m 'Публикуют задания на повтор'
+  kafka.channels.retry_30m -> notify.workers.retry 'Передаёт задания на повтор'
+  notify.workers.retry -> kafka.channels.retry_30m 'Публикует последующие повторы'
+  notify.workers.delivery -> kafka.statistics.progress 'Публикуют прогресс рассылок'
+  notify.workers.retry -> kafka.statistics.progress 'Публикует прогресс рассылок'
+  kafka.statistics.progress -> notify.workers.progress 'Передаёт прогресс для агрегации'
+  notify.workers.progress -> kafka.statistics.stats 'Публикуют снимки прогресса'
+  kafka.statistics.stats -> notify.workers.progress 'Передаёт снимки для сохранения'
+  notify.workers.delivery -> kafka.statistics.accepted 'Публикуют принятые уведомления'
+  notify.workers.retry -> kafka.statistics.accepted 'Публикует принятые уведомления'
+  kafka.statistics.accepted -> notify.workers.history 'Передаёт уведомления для записи в историю'
+  notify.workers.delivery -> kafka.statistics.events 'Публикуют события доставки'
+  notify.workers.retry -> kafka.statistics.events 'Публикует события доставки'
+  kafka.statistics.events -> notify.analytics 'Передаёт события для аналитики'
+}
+
+views {
+  view kafka_overview of kafka {
+    title 'Kafka — группы потоков'
+    description 'Черновая логическая группировка; физическое размещение не определено.'
+    include *
+    autoLayout LeftRight
+  }
+  view kafka_user_events of kafka.user_events {
+    title 'Kafka — Внешние события пользователей'
+    description 'Предварительные топики и примеры сообщений; контракты не согласованы.'
+    include *
+    autoLayout LeftRight
+  }
+  view kafka_commands of kafka.commands {
+    title 'Kafka — Внешние команды Notify'
+    description 'Предварительные топики и примеры сообщений; контракты не согласованы.'
+    include *
+    autoLayout LeftRight
+  }
+  view kafka_campaigns of kafka.campaigns {
+    title 'Kafka — Внутренние топики рассылок'
+    description 'Предварительные топики и примеры сообщений; контракты не согласованы.'
+    include *
+    autoLayout LeftRight
+  }
+  view kafka_channels of kafka.channels {
+    title 'Kafka — Внутренние топики доставки'
+    description 'Предварительные топики и примеры сообщений; контракты не согласованы.'
+    include *
+    autoLayout LeftRight
+  }
+  view kafka_statistics of kafka.statistics {
+    title 'Kafka — Внутренние топики статистики'
+    description 'Предварительные топики и примеры сообщений; контракты не согласованы.'
+    include *
+    autoLayout LeftRight
+  }
+}
