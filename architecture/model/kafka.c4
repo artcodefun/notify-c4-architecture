@@ -81,7 +81,7 @@ model {
       send = broker 'notify.campaign.inline.create.v1' {
         summary 'Внешний сервис → consumer Notify. Запрос на inline-рассылку одному пользователю по типу канала.'
         description '''
-          Внешний сервис передаёт уникальный campaign_id; Notify использует его как идентификатор inline-рассылки на одного пользователя. Повтор того же запроса не должен создавать новую рассылку. Обязательный channel_type: sms, push или email. Необязательный channel_key задаёт конкретный канал арендатора; без него сервис выбирает самый дешёвый подходящий канал указанного типа. deadline_at необязателен. Если пользователя или адреса нет, отправка завершается ошибкой.
+          Внешний сервис передаёт уникальный campaign_id; Notify использует его как идентификатор inline-рассылки на одного пользователя. Повтор того же запроса не должен создавать новую рассылку. Обязательны channel_type (sms, push или email) и строковая category для последующей фильтрации истории уведомлений. Необязательный channel_key задаёт конкретный канал арендатора; без него сервис выбирает самый дешёвый подходящий канал указанного типа. deadline_at необязателен. Если пользователя или адреса нет, отправка завершается ошибкой.
 
           **Пример сообщения — черновик:**
 
@@ -93,6 +93,7 @@ model {
             "type": "campaign.inline.create",
             "channel_type": "sms",
             "channel_key": "channel-sms-twilio-325",
+            "category": "informational",
             "deadline_at": "2026-11-10T13:00:00Z",
             "payload": {
               "title": "Заявка",
@@ -169,6 +170,7 @@ model {
               "tenant_id": "company-123",
               "user_id": "user-456",
               "channel_id": "channel-sms-1",
+              "category": "informational",
               "priority": "critical",
               "retry_attempt": 0
             }
@@ -193,6 +195,7 @@ model {
               "tenant_id": "company-123",
               "user_id": "user-456",
               "channel_id": "channel-sms-1",
+              "category": "informational",
               "priority": "high",
               "retry_attempt": 0
             }
@@ -217,6 +220,7 @@ model {
               "tenant_id": "company-123",
               "user_id": "user-456",
               "channel_id": "channel-sms-1",
+              "category": "informational",
               "priority": "normal",
               "retry_attempt": 0
             }
@@ -241,6 +245,7 @@ model {
               "tenant_id": "company-123",
               "user_id": "user-456",
               "channel_id": "channel-sms-1",
+              "category": "informational",
               "priority": "normal",
               "retry_attempt": 1,
               "due_at": "2026-11-10T12:01:00Z"
@@ -266,6 +271,7 @@ model {
               "tenant_id": "company-123",
               "user_id": "user-456",
               "channel_id": "channel-sms-1",
+              "category": "informational",
               "priority": "normal",
               "retry_attempt": 1,
               "due_at": "2026-11-10T12:05:00Z"
@@ -291,6 +297,7 @@ model {
               "tenant_id": "company-123",
               "user_id": "user-456",
               "channel_id": "channel-sms-1",
+              "category": "informational",
               "priority": "normal",
               "retry_attempt": 1,
               "due_at": "2026-11-10T12:30:00Z"
@@ -349,6 +356,7 @@ model {
               "tenant_id": "company-123",
               "user_id": "user-456",
               "channel_id": "channel-sms-1",
+              "category": "informational",
               "content": {"body": "Ваша заявка обработана"},
               "status": "sent",
               "accepted_at": "2026-11-10T12:00:00Z"

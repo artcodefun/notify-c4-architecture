@@ -71,7 +71,7 @@ model {
       campaigns = database 'campaigns' {
         summary 'Состояние и настройки массовых рассылок.'
         description '''
-          **Предварительные поля:** `id`, `tenant_id`, `channel_id`, `status`, `priority`, `content`, `scheduled_at`, `deadline_at`, `cancelled_at`, `run_id`, `created_at`. Создаётся до отправки, аудитория загружается порциями, затем рассылка запускается.
+          **Предварительные поля:** `id`, `tenant_id`, `channel_id`, `category`, `status`, `priority`, `content`, `scheduled_at`, `deadline_at`, `cancelled_at`, `run_id`, `created_at`. `category` передаётся вызывающей системой и сохраняется для фильтрации истории уведомлений. Рассылка создаётся до отправки, аудитория загружается порциями, затем рассылка запускается.
         '''
       }
       batches = database 'campaign_recipient_batches' {
@@ -100,7 +100,7 @@ model {
       notifications = database 'notifications' {
         summary 'История уведомлений пользователя и доступные через API статусы.'
         description '''
-          **Предварительные поля:** `id`, `tenant_id`, `user_id`, `channel_id`, `campaign_id` (при наличии), `content`, `status`, `created_at`, `accepted_at`. Создаётся асинхронно после успешной отправки провайдеру или при отмене либо истечении дедлайна без отправки; статусы sent, delivered, read, cancelled. accepted_at отсутствует, если провайдеру сообщение не отправлялось. Ожидающие и другие неуспешные отправки в историю не записываются.
+          **Предварительные поля:** `id`, `tenant_id`, `user_id`, `channel_id`, `campaign_id` (при наличии), `category`, `content`, `status`, `created_at`, `accepted_at`. `category` копируется из рассылки и доступна для фильтрации истории. Запись создаётся асинхронно после успешной отправки провайдеру или при отмене либо истечении дедлайна без отправки; статусы sent, delivered, read, cancelled. accepted_at отсутствует, если провайдеру сообщение не отправлялось. Ожидающие и другие неуспешные отправки в историю не записываются.
         '''
       }
     }

@@ -10,6 +10,7 @@ model {
           ID uuid.UUID
           TenantID uuid.UUID
           ChannelID uuid.UUID
+          Category string
           Content NotificationContent
           Priority Priority // critical | high | normal
           Status CampaignStatus // draft | scheduled | starting | started | completed | failed (предварительно)
@@ -20,7 +21,7 @@ model {
           Progress *CampaignProgress
           ```
 
-          **Правила и операции:** создать рассылку; добавлять порции аудитории до запуска; запустить немедленно или запланировать, закрыв загрузку; зафиксировать отмену. Перед отправкой и повтором проверяются отмена и дедлайн. Новый `run_id` отсеивает устаревшие запуски.
+          **Правила и операции:** создать рассылку; добавлять порции аудитории до запуска; запустить немедленно или запланировать, закрыв загрузку; зафиксировать отмену. `category` — обязательная строка, которую задаёт вызывающая система для последующей фильтрации истории. Перед отправкой и повтором проверяются отмена и дедлайн. Новый `run_id` отсеивает устаревшие запуски.
 
           TODO: согласовать состояния, переходы, итог отмены и дедлайна, а также правила обработки inline-рассылок.
         '''
@@ -80,11 +81,12 @@ model {
           CampaignID *uuid.UUID
           Recipient Recipient
           ChannelID uuid.UUID
+          Category string
           Priority Priority // critical | high | normal
           RetryAttempt int
           ```
 
-          **Правила:** перед отправкой проверяются ограничения, отмена и дедлайн; при временной ошибке возможно формирование повтора. TODO: уточнить классификацию ошибок.
+          **Правила:** `category` переносится из рассылки в историю уведомления. Перед отправкой проверяются ограничения, отмена и дедлайн; при временной ошибке возможно формирование повтора. TODO: уточнить классификацию ошибок.
         '''
       }
       notification = domain 'Notification' {
@@ -97,12 +99,13 @@ model {
           Recipient Recipient
           ChannelID uuid.UUID
           CampaignID *uuid.UUID
+          Category string
           Content NotificationContent
           Status NotificationStatus // sent | delivered | read | cancelled
           CreatedAt time.Time
           AcceptedAt *time.Time
           ```
-          Статус относится к записи истории; `accepted_at` заполняется после принятия провайдером.
+          Статус относится к записи истории; `accepted_at` заполняется после принятия провайдером. `category` передаётся вызывающей системой и позволяет фильтровать историю уведомлений.
 
           **Правила:** идентификатор уведомления может существовать во время обработки; запись истории создаётся асинхронно после успешной отправки провайдеру либо с `cancelled` при отмене или истечении дедлайна без обращения к провайдеру. Предварительные статусы истории: `sent`, `delivered`, `read`, `cancelled`.
 
