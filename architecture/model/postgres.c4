@@ -25,19 +25,15 @@ model {
       channels = database 'channels' {
         summary 'Настроенные каналы уведомлений.'
         description '''
-          **Предварительные поля:** `id`, `operator_id`, `channel_key`, `channel_type`, `provider_id`, `status`. Каждый канал использует одного провайдера; несколько каналов могут использовать одного провайдера.
+          **Предварительные поля:** `id`, `operator_id`, `channel_key`, `channel_type`, `provider_id`, `mobile_application_id` (nullable), `status`. Каждый канал использует одного провайдера; несколько каналов могут использовать одного провайдера. Для push mobile_application_id обязателен и уникален; для SMS и email отсутствует.
+
+          **Ограничения:** CHECK требует mobile_application_id для push и запрещает его для SMS/email. Частичный UNIQUE индекс по mobile_application_id при значении не NULL обеспечивает связь приложения не более чем с одним push-каналом.
         '''
       }
       applications = database 'mobile_applications' {
         summary 'Мобильные приложения операторов.'
         description '''
           **Предварительные поля:** `id`, `operator_id`, `provider_id`, `platform`, `package_name`, `status`.
-        '''
-      }
-      channel_apps = database 'channel_mobile_applications' {
-        summary 'Связи каналов с мобильными приложениями.'
-        description '''
-          **Предварительные поля:** `channel_id`, `mobile_application_id`.
         '''
       }
     }
@@ -64,6 +60,14 @@ model {
         summary 'Устройства и актуальные push-токены.'
         description '''
           **Предварительные поля:** `id`, `operator_id`, `user_id`, `mobile_application_id`, `installation_id`, `token`, `status`, `updated_at`.
+        '''
+      }
+      delivery_opt_outs = database 'user_delivery_opt_outs' {
+        summary 'Явные отказы пользователя от доставки по каналу.'
+        description '''
+          **Предварительные поля:** `operator_id`, `user_id`, `channel_type`, `mobile_application_id` (nullable), `created_at`. Отсутствие записи означает разрешённую доставку. Для push mobile_application_id обязателен; для SMS и email отсутствует.
+
+          **Ограничения:** два частичных уникальных индекса предотвращают дубли: (`operator_id`, `user_id`, `channel_type`) при mobile_application_id IS NULL и (`operator_id`, `user_id`, `channel_type`, `mobile_application_id`) при mobile_application_id IS NOT NULL. CHECK ограничивает mobile_application_id типом push.
         '''
       }
     }
@@ -114,8 +118,9 @@ model {
   postgres.users.emails -> postgres.users.users 'Принадлежат пользователю'
   postgres.users.push_tokens -> postgres.users.users 'Принадлежат пользователю'
   postgres.users.push_tokens -> postgres.channels.applications 'Относятся к приложению'
-  postgres.channels.channel_apps -> postgres.channels.applications 'Связывает приложение'
-  postgres.channels.channel_apps -> postgres.channels.channels 'Связывает канал'
+  postgres.users.delivery_opt_outs -> postgres.users.users 'Принадлежат пользователю'
+  postgres.users.delivery_opt_outs -> postgres.channels.applications 'Относятся к приложению для push'
+  postgres.channels.channels -> postgres.channels.applications 'Для push связаны один к одному'
   postgres.campaigns.campaigns -> postgres.channels.channels 'Используют канал'
   postgres.campaigns.batches -> postgres.campaigns.campaigns 'Принадлежат рассылке'
   postgres.templates.versions -> postgres.templates.templates 'Принадлежат шаблону'

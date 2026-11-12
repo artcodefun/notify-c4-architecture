@@ -86,7 +86,7 @@ model {
           RetryAttempt int
           ```
 
-          **Правила:** `category` переносится из рассылки в историю уведомления. Перед отправкой проверяются ограничения, отмена и дедлайн; при временной ошибке возможно формирование повтора. TODO: уточнить классификацию ошибок.
+          **Правила:** `category` переносится из рассылки в историю уведомления. Перед отправкой проверяются настройки UserDeliveryOptOut, ограничения, отмена и дедлайн; при временной ошибке возможно формирование повтора. TODO: уточнить классификацию ошибок.
         '''
       }
       notification = domain 'Notification' {
@@ -141,10 +141,11 @@ model {
           ChannelKey string
           ChannelType ChannelType // sms | push | email
           ProviderID uuid.UUID
+          MobileApplicationID *uuid.UUID // обязателен только для push
           Status ChannelStatus // provisioning | active | disabled
           ```
 
-          **Правила и операции:** канал принадлежит оператору и использует одного провайдера; несколько каналов могут использовать одного провайдера. Канал можно активировать или отключить; его обработчики следуют состоянию канала. При создании рассылки через REST или Kafka канал выбирается по переданному ключу; без ключа сервис выбирает самый дешёвый подходящий канал указанного типа. TODO: определить расчёт стоимости, момент выбора и поведение, если подходящего канала нет.
+          **Правила и операции:** канал принадлежит оператору и использует одного провайдера; несколько каналов могут использовать одного провайдера. Push-канал связан ровно с одним мобильным приложением, а мобильное приложение — не более чем с одним push-каналом. Для SMS и email MobileApplicationID отсутствует. Канал можно активировать или отключить; его обработчики следуют состоянию канала. При создании рассылки через REST или Kafka канал выбирается по переданному ключу; без ключа сервис выбирает самый дешёвый подходящий канал указанного типа. TODO: определить расчёт стоимости, момент выбора и поведение, если подходящего канала нет.
         '''
       }
       provider = domain 'Provider' {
@@ -178,7 +179,7 @@ model {
           Status ConfigurationStatus // active | disabled
           ```
 
-          **Операции:** подключить или отключить провайдера; связать приложение с каналом. TODO: согласовать совместимость и влияние смены провайдера.
+          **Операции:** подключить или отключить провайдера. Push-канал ссылается на приложение напрямую. TODO: согласовать совместимость и влияние смены провайдера.
         '''
       }
     }
@@ -242,6 +243,21 @@ model {
           ```
 
           **Операции:** зарегистрировать, обновить или деактивировать токен. TODO: согласовать источник событий и защиту токенов.
+        '''
+      }
+      delivery_opt_out = domain 'UserDeliveryOptOut' {
+        summary 'Явный отказ пользователя от способа доставки.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          OperatorID uuid.UUID
+          UserID string
+          ChannelType ChannelType // sms | push | email
+          MobileApplicationID *uuid.UUID // обязателен только для push
+          CreatedAt time.Time
+          ```
+
+          **Правила:** отсутствие записи означает разрешённую доставку. Для SMS и email существует один opt-out на пользователя и тип канала. Для push opt-out создаётся отдельно для каждого мобильного приложения. Для push mobile_application_id обязателен; для SMS и email отсутствует. Добавление и удаление opt-out идемпотентны.
         '''
       }
     }
@@ -308,12 +324,14 @@ model {
   notify.domain.campaigns.notification -> notify.domain.campaigns.content 'Содержит данные'
   notify.domain.channels.channel -> notify.domain.channels.provider 'Использует провайдера'
   notify.domain.channels.application -> notify.domain.channels.provider 'Может использовать провайдера'
-  notify.domain.channels.channel -> notify.domain.channels.application 'Может поддерживать приложение'
+  notify.domain.channels.channel -> notify.domain.channels.application 'Для push связан с одним приложением'
   notify.domain.users.user -> notify.domain.access.operator 'Принадлежит оператору'
   notify.domain.users.phone -> notify.domain.users.user 'Принадлежит пользователю'
   notify.domain.users.email -> notify.domain.users.user 'Принадлежит пользователю'
   notify.domain.users.token -> notify.domain.users.user 'Принадлежит пользователю'
   notify.domain.users.token -> notify.domain.channels.application 'Относится к приложению'
+  notify.domain.users.delivery_opt_out -> notify.domain.users.user 'Принадлежит пользователю'
+  notify.domain.users.delivery_opt_out -> notify.domain.channels.application 'Относится к приложению для push'
   notify.domain.access.key -> notify.domain.access.operator 'Принадлежит оператору'
   notify.domain.templates.template -> notify.domain.access.operator 'Принадлежит оператору'
 }

@@ -219,6 +219,57 @@ model {
         '''
       }
     }
+    delivery_preferences = service 'Настройки доставки пользователя' {
+      list_opt_outs = service 'GET /users/{user_id}/delivery-opt-outs' {
+        summary 'Получить все отказы пользователя от доставки.'
+        description '''
+          Отсутствие opt-out означает разрешённую доставку. Для SMS и email mobile_application_id отсутствует; для push он определяет конкретное мобильное приложение.
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "items": [
+              {
+                "channel_type": "sms",
+                "mobile_application_id": null
+              },
+              {
+                "channel_type": "push",
+                "mobile_application_id": "app-001"
+              }
+            ]
+          }
+          ```
+        '''
+      }
+      set_opt_out = service 'PUT /users/{user_id}/delivery-opt-outs' {
+        summary 'Добавить или удалить отказ пользователя от доставки.'
+        description '''
+          opted_out=true идемпотентно создаёт opt-out; opted_out=false идемпотентно удаляет его и снова разрешает доставку. channel_type обязателен: sms, push или email. mobile_application_id обязателен только для push и запрещён для SMS/email.
+
+          **Пример тела запроса:**
+
+          ```json
+          {
+            "channel_type": "push",
+            "mobile_application_id": "app-001",
+            "opted_out": true
+          }
+          ```
+
+          **Пример тела ответа:**
+
+          ```json
+          {
+            "channel_type": "push",
+            "mobile_application_id": "app-001",
+            "opted_out": true
+          }
+          ```
+        '''
+      }
+    }
     channels = service 'Каналы' {
       list = service 'GET /channels' {
         summary 'Получить список каналов оператора.'
@@ -245,15 +296,16 @@ model {
       create = service 'POST /channels' {
         summary 'Создать канал уведомлений.'
         description '''
-          TODO: определить статусы создания и привязку провайдеров.
+          Для push mobile_application_id обязателен и может использоваться только одним каналом. Для SMS и email mobile_application_id запрещён.
 
           **Пример тела запроса:**
 
           ```json
           {
-            "channel": "channel-sms-1",
-            "type": "sms",
-            "provider_id": "provider-001"
+            "channel": "channel-push-1",
+            "type": "push",
+            "provider_id": "provider-001",
+            "mobile_application_id": "app-001"
           }
           ```
 
@@ -261,7 +313,8 @@ model {
 
           ```json
           {
-            "channel": "channel-sms-1",
+            "channel": "channel-push-1",
+            "mobile_application_id": "app-001",
             "status": "provisioning"
           }
           ```
@@ -278,8 +331,9 @@ model {
 
           ```json
           {
-            "channel": "channel-sms-1",
-            "type": "sms",
+            "channel": "channel-push-1",
+            "type": "push",
+            "mobile_application_id": "app-001",
             "status": "active"
           }
           ```
@@ -453,26 +507,6 @@ model {
         summary 'Отключить провайдера от приложения.'
         description '''
           TODO: определить влияние на каналы и существующие токены.
-
-          TODO: согласовать код и тело ответа.
-
-          Примеры предварительные; коды ответов и ошибки требуют согласования.
-        '''
-      }
-      channel_link = service 'PUT /channels/{channel_id}/mobile-applications/{application_id}' {
-        summary 'Добавить приложение в канал.'
-        description '''
-          TODO: определить правила проверки совместимости.
-
-          TODO: согласовать код и тело ответа.
-
-          Примеры предварительные; коды ответов и ошибки требуют согласования.
-        '''
-      }
-      channel_unlink = service 'DELETE /channels/{channel_id}/mobile-applications/{application_id}' {
-        summary 'Убрать приложение из канала.'
-        description '''
-          TODO: определить обработку уже созданных заданий.
 
           TODO: согласовать код и тело ответа.
 
@@ -654,6 +688,12 @@ views {
     style status {
       shape rectangle
     }
+  }
+  view rest_delivery_preferences of notify.api.delivery_preferences {
+    title 'REST API — Настройки доставки пользователя'
+    description 'Предварительные операции управления opt-out; пути, права, ошибки и ответы предстоит согласовать.'
+    include *
+    autoLayout LeftRight
   }
   view rest_channels of notify.api.channels {
     title 'REST API — Каналы'
