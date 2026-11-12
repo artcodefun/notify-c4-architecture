@@ -75,7 +75,7 @@ model {
       campaigns = database 'campaigns' {
         summary 'Состояние и настройки массовых рассылок.'
         description '''
-          **Предварительные поля:** `id`, `operator_id`, `channel_id`, `category`, `status`, `priority`, `content`, `scheduled_at`, `deadline_at`, `cancelled_at`, `run_id`, `created_at`. `category` передаётся вызывающей системой и сохраняется для фильтрации истории уведомлений. Рассылка создаётся до отправки, аудитория загружается порциями, затем рассылка запускается.
+          **Предварительные поля:** `id`, `operator_id`, `channel_id`, `category`, `status`, `priority`, `content`, `scheduled_at`, `deadline_at`, `cancelled_at`, `run_id`, `created_at`. content хранит канонический payload с title, body, image_url и data. `category` передаётся вызывающей системой и сохраняется для фильтрации истории уведомлений. Рассылка создаётся до отправки, аудитория загружается порциями, затем рассылка запускается.
         '''
       }
       batches = database 'campaign_recipient_batches' {
@@ -96,7 +96,7 @@ model {
       versions = database 'template_versions' {
         summary 'Версии шаблонов и содержимое.'
         description '''
-          **Предварительные поля:** `id`, `template_id`, `version`, `content`, `created_at`.
+          **Предварительные поля:** `id`, `template_id`, `version`, `content`, `created_at`. content использует тот же канонический payload с title, body, image_url и data.
         '''
       }
     }
@@ -104,7 +104,7 @@ model {
       notifications = database 'notifications' {
         summary 'Сообщения пользователя, состояния доставки и получения.'
         description '''
-          **Предварительные поля:** `id`, `operator_id`, `user_id`, `channel_id`, `campaign_id` (при наличии), `category`, `content`, `delivery_status`, `receive_status`, `retry_count`, `created_at`, `updated_at`. delivery_status: pending, success, fail, canceled. receive_status: sent, delivered, read; отсутствует до успешной отправки провайдеру. `category` копируется из рассылки и доступна для фильтрации сообщений. delivery и retry-воркеры напрямую создают или обновляют запись; retry_count увеличивается при каждом повторе. Отдельная таблица попыток доставки не используется.
+          **Предварительные поля:** `id`, `operator_id`, `user_id`, `channel_id`, `campaign_id` (при наличии), `category`, `content`, `delivery_status`, `receive_status`, `retry_count`, `created_at`, `updated_at`. content использует канонический payload с title, body, image_url и data. delivery_status: pending, success, fail, canceled. receive_status: sent, delivered, read; отсутствует до успешной отправки провайдеру. `category` копируется из рассылки и доступна для фильтрации сообщений. delivery и retry-воркеры напрямую создают или обновляют запись; retry_count увеличивается при каждом повторе. Отдельная таблица попыток доставки не используется.
         '''
       }
     }

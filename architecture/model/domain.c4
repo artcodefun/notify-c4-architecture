@@ -123,10 +123,9 @@ model {
           Body *string
           ImageURL *string
           Data map[string]string
-          ChannelData any
           ```
 
-          **Правила:** содержимое должно соответствовать выбранному типу канала. TODO: определить форматы для SMS, email и push.
+          **Правила:** это единый канонический payload для всех каналов. Адаптер канала использует только поддерживаемые поля и не передаёт остальные провайдеру: SMS обычно использует body, email — title, body и image_url, push — все поля. ChannelData и другие канал-специфичные поля не поддерживаются. TODO: определить ограничения размера и обязательность полей для каждого канала.
         '''
       }
     }
@@ -303,7 +302,7 @@ model {
           OperatorID uuid.UUID
           Name string
           ChannelType ChannelType // sms | push | email
-          Content any
+          Content NotificationContent
           Version int
           ```
 
