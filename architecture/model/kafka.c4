@@ -106,54 +106,81 @@ model {
       }
     }
     campaigns = broker 'Внутренние топики рассылок' {
-      description 'Запуск и подготовка заданий массовой рассылки. Scheduler сохраняет новый run_id в PostgreSQL и публикует запуск в Kafka; проверка fencing и восстановление повторяют запуск при сбоях. Это не единая транзакция PostgreSQL и Kafka.'
-      start = broker 'notify.campaign.run.v1' {
-        summary 'Планировщик → worker. Запуск рассылки после наступления времени отправки.'
+      description 'Два независимых набора топиков: batched — для рассылок с сохранёнными порциями аудитории, inline — для небольших рассылок с аудиторией в запросе. Все внутренние записи Notify используют envelope: верхнеуровневые type и schema_version, а полезные данные — в payload. Scheduler сохраняет новый run_id в PostgreSQL и публикует batched-запуск в Kafka; проверка fencing и восстановление повторяют запуск при сбоях. Это не единая транзакция PostgreSQL и Kafka.'
+      batched_run = broker 'notify.campaign.batched.run.v1' {
+        summary 'Планировщик → worker. Запуск рассылки с сохранёнными порциями после наступления времени отправки.'
         description '''
           **Пример сообщения — черновик:**
 
           ```json
           {
-            "campaign_id": "campaign-001",
-            "operator_id": "company-123",
-            "run_id": "run-001"
+            "type": "campaign_run_requested",
+            "schema_version": 1,
+            "payload": {
+              "campaign_id": "campaign-001",
+              "run_id": "run-001"
+            }
           }
           ```
         '''
       }
-      batch = broker 'notify.campaign.batch.v1' {
-        summary 'Worker → worker. Подготовка порции аудитории.'
+      batched_fanout = broker 'notify.campaign.batched.fanout.v1' {
+        summary 'Worker → worker. Разворачивание одной сохранённой порции в задания доставки.'
         description '''
+          Событие адресует одну сохранённую порцию аудитории. Оно намеренно не дублирует campaign_id, operator_id и run_id: consumer загружает порцию и связанные с ней данные из PostgreSQL.
+
           **Пример сообщения — черновик:**
 
           ```json
           {
-            "campaign_id": "campaign-001",
-            "operator_id": "company-123",
-            "run_id": "run-001",
-            "batch_id": "batch-001"
+            "type": "campaign_batch_fanout",
+            "schema_version": 1,
+            "payload": {
+              "batch_id": "batch-001"
+            }
           }
           ```
         '''
       }
-      fanout = broker 'notify.campaign.fanout.v1' {
-        summary 'Worker → worker. Разворачивание порции в отдельные задания доставки.'
+      inline_run = broker 'notify.campaign.inline.run.v1' {
+        summary 'Kafka consumer → worker. Запуск inline-рассылки после её создания.'
         description '''
           **Пример сообщения — черновик:**
 
           ```json
           {
-            "campaign_id": "campaign-001",
-            "operator_id": "company-123",
-            "run_id": "run-001",
-            "batch_id": "batch-001"
+            "type": "campaign_run_requested",
+            "schema_version": 1,
+            "payload": {
+              "campaign_id": "campaign-001",
+              "run_id": "run-001"
+            }
+          }
+          ```
+        '''
+      }
+      inline_fanout = broker 'notify.campaign.inline.fanout.v1' {
+        summary 'Worker → worker. Разворачивание аудитории inline-рассылки в задания доставки.'
+        description '''
+          Inline-аудитория неизменяема после создания кампании, поэтому событие несёт campaign_id и recipients; worker загружает остальные данные кампании из PostgreSQL.
+
+          **Пример сообщения — черновик:**
+
+          ```json
+          {
+            "type": "campaign_inline_fanout",
+            "schema_version": 1,
+            "payload": {
+              "campaign_id": "campaign-001",
+              "recipients": ["user-456", "user-789"]
+            }
           }
           ```
         '''
       }
     }
     channels = broker 'Внутренние топики доставки' {
-      description 'Для каждого настроенного канала оператора создаются три топика доставки по приоритетам и три топика повторов по интервалам.'
+      description 'Для каждого настроенного канала оператора создаются три топика доставки по приоритетам и три топика повторов по интервалам. Все внутренние записи используют envelope: верхнеуровневые type и schema_version, а полезные данные — в payload.'
       delivery_critical = broker 'notify.delivery.critical.{channel_id}' {
         summary 'Задания доставки приоритета critical для конкретного канала оператора.'
         description '''
@@ -164,7 +191,6 @@ model {
             "type": "delivery_work",
             "schema_version": 1,
             "payload": {
-              "schema_version": 1,
               "delivery_id": "delivery-001",
               "notification_id": "notification-001",
               "campaign_id": "campaign-001",
@@ -189,7 +215,6 @@ model {
             "type": "delivery_work",
             "schema_version": 1,
             "payload": {
-              "schema_version": 1,
               "delivery_id": "delivery-001",
               "notification_id": "notification-001",
               "campaign_id": "campaign-001",
@@ -214,7 +239,6 @@ model {
             "type": "delivery_work",
             "schema_version": 1,
             "payload": {
-              "schema_version": 1,
               "delivery_id": "delivery-001",
               "notification_id": "notification-001",
               "campaign_id": "campaign-001",
@@ -239,7 +263,6 @@ model {
             "type": "retry_work",
             "schema_version": 1,
             "payload": {
-              "schema_version": 1,
               "delivery_id": "delivery-001",
               "notification_id": "notification-001",
               "campaign_id": "campaign-001",
@@ -265,7 +288,6 @@ model {
             "type": "retry_work",
             "schema_version": 1,
             "payload": {
-              "schema_version": 1,
               "delivery_id": "delivery-001",
               "notification_id": "notification-001",
               "campaign_id": "campaign-001",
@@ -291,7 +313,6 @@ model {
             "type": "retry_work",
             "schema_version": 1,
             "payload": {
-              "schema_version": 1,
               "delivery_id": "delivery-001",
               "notification_id": "notification-001",
               "campaign_id": "campaign-001",
@@ -309,7 +330,7 @@ model {
       }
     }
     statistics = broker 'Внутренние топики статистики' {
-      description 'Прогресс рассылок и события доставки для аналитики.'
+      description 'Прогресс рассылок и события доставки для аналитики. Все внутренние записи Notify используют envelope: верхнеуровневые type и schema_version, а полезные данные — в payload.'
       progress = broker 'notify.campaign.progress.v1' {
         summary 'Worker → агрегатор: изменения прогресса рассылки.'
         description '''
@@ -317,12 +338,16 @@ model {
 
           ```json
           {
-            "event_id": "evt-002",
-            "operator_id": "company-123",
-            "campaign_id": "campaign-001",
-            "type": "delivery.completed",
-            "accepted_delta": 1,
-            "failed_delta": 0
+            "type": "campaign_progress_delta",
+            "schema_version": 1,
+            "payload": {
+              "event_id": "evt-002",
+              "event_type": "delivery_completed",
+              "operator_id": "company-123",
+              "campaign_id": "campaign-001",
+              "accepted_delta": 1,
+              "failed_delta": 0
+            }
           }
           ```
         '''
@@ -334,11 +359,15 @@ model {
 
           ```json
           {
-            "operator_id": "company-123",
-            "campaign_id": "campaign-001",
-            "processed": 100,
-            "accepted": 98,
-            "failed": 2
+            "type": "campaign_stats_snapshot",
+            "schema_version": 1,
+            "payload": {
+              "operator_id": "company-123",
+              "campaign_id": "campaign-001",
+              "processed": 100,
+              "accepted": 98,
+              "failed": 2
+            }
           }
           ```
         '''
@@ -350,7 +379,7 @@ model {
 
           ```json
           {
-            "type": "notification.history",
+            "type": "notification_history",
             "schema_version": 1,
             "payload": {
               "notification_id": "notification-001",
@@ -375,14 +404,18 @@ model {
 
           ```json
           {
-            "event_id": "evt-001",
-            "operator_id": "company-123",
-            "occurred_at": "2026-11-10T12:00:00Z",
-            "type": "delivery.failed",
-            "delivery_id": "delivery-002",
-            "channel": "sms",
-            "attempt": 1,
-            "failure_reason": "provider_unavailable"
+            "type": "delivery_event",
+            "schema_version": 1,
+            "payload": {
+              "event_id": "evt-001",
+              "event_type": "delivery_failed",
+              "operator_id": "company-123",
+              "occurred_at": "2026-11-10T12:00:00Z",
+              "delivery_id": "delivery-002",
+              "channel": "sms",
+              "attempt": 1,
+              "failure_reason": "provider_unavailable"
+            }
           }
           ```
         '''
@@ -401,12 +434,15 @@ model {
   notify.consumer -> postgres 'Обновляет локальные данные пользователей и контактов'
   clients -> kafka.campaign_requests.send 'Публикуют запросы inline-рассылок'
   kafka.campaign_requests.send -> notify.consumer 'Передаёт запросы inline-рассылок'
-  notify.scheduler -> kafka.campaigns.start 'Публикует задание запуска'
-  kafka.campaigns.start -> notify.workers.campaign 'Передаёт задание запуска'
-  notify.workers.campaign -> kafka.campaigns.batch 'Создают задания подготовки порций'
-  kafka.campaigns.batch -> notify.workers.campaign 'Передаёт задания подготовки'
-  notify.workers.campaign -> kafka.campaigns.fanout 'Публикуют задания разворачивания'
-  kafka.campaigns.fanout -> notify.workers.campaign 'Передаёт задания разворачивания'
+  notify.scheduler -> kafka.campaigns.batched_run 'Публикует задание запуска рассылки с порциями'
+  kafka.campaigns.batched_run -> notify.workers.campaign 'Передаёт задание запуска рассылки с порциями'
+  notify.workers.campaign -> kafka.campaigns.batched_fanout 'Публикуют задания разворачивания сохранённых порций'
+  kafka.campaigns.batched_fanout -> notify.workers.campaign 'Передаёт задания разворачивания сохранённых порций'
+  notify.api -> kafka.campaigns.inline_run 'Публикует задание запуска REST inline-рассылки'
+  notify.consumer -> kafka.campaigns.inline_run 'Публикует задание запуска inline-рассылки'
+  kafka.campaigns.inline_run -> notify.workers.campaign 'Передаёт задание запуска inline-рассылки'
+  notify.workers.campaign -> kafka.campaigns.inline_fanout 'Публикуют задания разворачивания inline-аудитории'
+  kafka.campaigns.inline_fanout -> notify.workers.campaign 'Передаёт задания разворачивания inline-аудитории'
   notify.provisioner -> kafka.channels 'Создаёт и проверяет топики каналов' {
     description 'При отключении канала топики автоматически не удаляются, сообщения остаются в Kafka до истечения срока хранения.'
   }
