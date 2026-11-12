@@ -34,7 +34,7 @@ model {
      icon tech:kafka-icon
   }
   postgres = database 'PostgreSQL' {
-    description 'История уведомлений, настройки операторов, рассылки, каналы, статусы отправок'
+    description 'Сообщения и их состояния доставки, настройки операторов, рассылки и каналы'
     icon tech:postgresql
   }
   redis = database 'Redis' {

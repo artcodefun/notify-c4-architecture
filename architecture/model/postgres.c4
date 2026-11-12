@@ -96,11 +96,11 @@ model {
         '''
       }
     }
-    history = database 'История сообщений' {
+    messages = database 'Сообщения' {
       notifications = database 'notifications' {
-        summary 'История уведомлений пользователя и доступные через API статусы.'
+        summary 'Сообщения пользователя, состояния доставки и получения.'
         description '''
-          **Предварительные поля:** `id`, `operator_id`, `user_id`, `channel_id`, `campaign_id` (при наличии), `category`, `content`, `status`, `created_at`, `accepted_at`. `category` копируется из рассылки и доступна для фильтрации истории. Запись создаётся асинхронно после успешной отправки провайдеру или при отмене либо истечении дедлайна без отправки; статусы sent, delivered, read, cancelled. accepted_at отсутствует, если провайдеру сообщение не отправлялось. Ожидающие и другие неуспешные отправки в историю не записываются.
+          **Предварительные поля:** `id`, `operator_id`, `user_id`, `channel_id`, `campaign_id` (при наличии), `category`, `content`, `delivery_status`, `receive_status`, `retry_count`, `created_at`, `updated_at`. delivery_status: pending, success, fail, canceled. receive_status: sent, delivered, read; отсутствует до успешной отправки провайдеру. `category` копируется из рассылки и доступна для фильтрации сообщений. delivery и retry-воркеры напрямую создают или обновляют запись; retry_count увеличивается при каждом повторе. Отдельная таблица попыток доставки не используется.
         '''
       }
     }
@@ -119,9 +119,9 @@ model {
   postgres.campaigns.campaigns -> postgres.channels.channels 'Используют канал'
   postgres.campaigns.batches -> postgres.campaigns.campaigns 'Принадлежат рассылке'
   postgres.templates.versions -> postgres.templates.templates 'Принадлежат шаблону'
-  postgres.history.notifications -> postgres.users.users 'История пользователя'
-  postgres.history.notifications -> postgres.channels.channels 'Отправлены через канал'
-  postgres.history.notifications -> postgres.campaigns.campaigns 'Могут относиться к рассылке'
+  postgres.messages.notifications -> postgres.users.users 'Сообщения пользователя'
+  postgres.messages.notifications -> postgres.channels.channels 'Отправлены через канал'
+  postgres.messages.notifications -> postgres.campaigns.campaigns 'Могут относиться к рассылке'
 }
 
 views {
@@ -161,8 +161,8 @@ views {
     include *
     autoLayout LeftRight
   }
-  view postgres_history of postgres.history {
-    title 'PostgreSQL — История сообщений'
+  view postgres_messages of postgres.messages {
+    title 'PostgreSQL — Сообщения'
     description 'Черновые таблицы и поля; типы, индексы и ограничения предстоит согласовать.'
     include *
     autoLayout LeftRight

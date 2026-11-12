@@ -329,76 +329,10 @@ model {
         '''
       }
     }
-    statistics = broker 'Внутренние топики статистики' {
-      description 'Прогресс рассылок и события доставки для аналитики. Все внутренние записи Notify используют envelope: верхнеуровневые type и schema_version, а полезные данные — в payload.'
-      progress = broker 'notify.campaign.progress.v1' {
-        summary 'Worker → агрегатор: изменения прогресса рассылки.'
-        description '''
-          **Пример сообщения — черновик:**
-
-          ```json
-          {
-            "type": "campaign_progress_delta",
-            "schema_version": 1,
-            "payload": {
-              "event_id": "evt-002",
-              "event_type": "delivery_completed",
-              "operator_id": "company-123",
-              "campaign_id": "campaign-001",
-              "accepted_delta": 1,
-              "failed_delta": 0
-            }
-          }
-          ```
-        '''
-      }
-      stats = broker 'notify.campaign.stats.v1' {
-        summary 'Агрегированный снимок прогресса.'
-        description '''
-          **Пример сообщения — черновик:**
-
-          ```json
-          {
-            "type": "campaign_stats_snapshot",
-            "schema_version": 1,
-            "payload": {
-              "operator_id": "company-123",
-              "campaign_id": "campaign-001",
-              "processed": 100,
-              "accepted": 98,
-              "failed": 2
-            }
-          }
-          ```
-        '''
-      }
-      history = broker 'notify.notification.history.v1' {
-        summary 'Асинхронная запись отправленного или отменённого уведомления в историю.'
-        description '''
-          **Пример сообщения — черновик:**
-
-          ```json
-          {
-            "type": "notification_history",
-            "schema_version": 1,
-            "payload": {
-              "notification_id": "notification-001",
-              "operator_id": "company-123",
-              "user_id": "user-456",
-              "channel_id": "channel-sms-1",
-              "category": "informational",
-              "content": {"body": "Ваша заявка обработана"},
-              "status": "sent",
-              "accepted_at": "2026-11-10T12:00:00Z"
-            }
-          }
-          ```
-
-          После принятия провайдером записывается sent; delivered и read могут поступить позже. При отмене или истечении дедлайна без отправки публикуется cancelled без accepted_at.
-        '''
-      }
+    delivery_events = broker 'Внутренние топики аналитики' {
+      description 'Все изменения состояния сообщений публикуются для аналитики в ClickHouse. Запись сообщения и обновление прогресса происходят напрямую в PostgreSQL; отдельных топиков progress, stats и history нет. Все внутренние записи Notify используют envelope: верхнеуровневые type и schema_version, а полезные данные — в payload.'
       events = broker 'notify.delivery.events.v1' {
-        summary 'События результатов и попыток для аналитики.'
+        summary 'Изменения состояния сообщений и повторы для аналитики.'
         description '''
           **Пример сообщения — черновик:**
 
@@ -408,12 +342,16 @@ model {
             "schema_version": 1,
             "payload": {
               "event_id": "evt-001",
-              "event_type": "delivery_failed",
+              "event_type": "message_status_changed",
               "operator_id": "company-123",
               "occurred_at": "2026-11-10T12:00:00Z",
               "delivery_id": "delivery-002",
+              "notification_id": "notification-001",
+              "campaign_id": "campaign-001",
               "channel": "sms",
-              "attempt": 1,
+              "retry_count": 1,
+              "delivery_status": "fail",
+              "receive_status": null,
               "failure_reason": "provider_unavailable"
             }
           }
@@ -461,17 +399,9 @@ model {
   notify.workers.delivery -> kafka.channels.retry_30m 'Публикуют задания на повтор'
   kafka.channels.retry_30m -> notify.workers.retry 'Передаёт задания на повтор'
   notify.workers.retry -> kafka.channels.retry_30m 'Публикует последующие повторы'
-  notify.workers.delivery -> kafka.statistics.progress 'Публикуют прогресс рассылок'
-  notify.workers.retry -> kafka.statistics.progress 'Публикует прогресс рассылок'
-  kafka.statistics.progress -> notify.workers.progress 'Передаёт прогресс для агрегации'
-  notify.workers.progress -> kafka.statistics.stats 'Публикуют снимки прогресса'
-  kafka.statistics.stats -> notify.workers.progress 'Передаёт снимки для сохранения'
-  notify.workers.delivery -> kafka.statistics.history 'Публикуют уведомления для истории'
-  notify.workers.retry -> kafka.statistics.history 'Публикует уведомления для истории'
-  kafka.statistics.history -> notify.workers.history 'Передаёт уведомления для записи в историю'
-  notify.workers.delivery -> kafka.statistics.events 'Публикуют события доставки'
-  notify.workers.retry -> kafka.statistics.events 'Публикует события доставки'
-  kafka.statistics.events -> notify.delivery_statistics 'Передаёт события для аналитики'
+  notify.workers.delivery -> kafka.delivery_events.events 'Публикуют изменения состояния сообщений'
+  notify.workers.retry -> kafka.delivery_events.events 'Публикует изменения состояния сообщений'
+  kafka.delivery_events.events -> notify.delivery_statistics 'Передаёт события для аналитики'
 }
 
 views {
@@ -505,9 +435,9 @@ views {
     include *
     autoLayout LeftRight
   }
-  view kafka_statistics of kafka.statistics {
-    title 'Kafka — Внутренние топики статистики'
-    description 'Предварительные топики и примеры сообщений; контракты не согласованы.'
+  view kafka_delivery_events of kafka.delivery_events {
+    title 'Kafka — Внутренние топики аналитики'
+    description 'События изменений состояния сообщений для аналитики в ClickHouse.'
     include *
     autoLayout LeftRight
   }

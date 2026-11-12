@@ -63,11 +63,11 @@ model {
           SourceBatchesFannedOut int
           DeliveryTotal int
           DeliveryProcessed int
-          DeliveryAcceptedCount int
-          DeliveryFailedCount int
+          DeliverySuccessCount int
+          DeliveryFailCount int
           ```
 
-          **Операции:** учитывать подготовленные порции и результаты заданий; определять завершение обработки. TODO: согласовать счётчики отменённых и просроченных заданий и правило завершения.
+          **Операции:** учитывать подготовленные порции и текущее состояние сообщений из PostgreSQL; определять завершение обработки. TODO: согласовать счётчики отменённых и просроченных заданий и правило завершения.
         '''
       }
       work = domain 'DeliveryWork' {
@@ -90,7 +90,7 @@ model {
         '''
       }
       notification = domain 'Notification' {
-        summary 'Логическое уведомление и его статус в истории.'
+        summary 'Сообщение со статусом доставки и статусом получения.'
         description '''
           **Поля (предварительно):**
           ```go
@@ -101,13 +101,15 @@ model {
           CampaignID *uuid.UUID
           Category string
           Content NotificationContent
-          Status NotificationStatus // sent | delivered | read | cancelled
+          DeliveryStatus DeliveryStatus // pending | success | fail | canceled
+          ReceiveStatus *ReceiveStatus // sent | delivered | read
+          RetryCount int
           CreatedAt time.Time
-          AcceptedAt *time.Time
+          UpdatedAt time.Time
           ```
-          Статус относится к записи истории; `accepted_at` заполняется после принятия провайдером. `category` передаётся вызывающей системой и позволяет фильтровать историю уведомлений.
+          `category` передаётся вызывающей системой и позволяет фильтровать историю сообщений. retry_count увеличивается для каждой повторной отправки. receive_status отсутствует, пока сообщение не принято провайдером.
 
-          **Правила:** идентификатор уведомления может существовать во время обработки; запись истории создаётся асинхронно после успешной отправки провайдеру либо с `cancelled` при отмене или истечении дедлайна без обращения к провайдеру. Предварительные статусы истории: `sent`, `delivered`, `read`, `cancelled`.
+          **Правила:** delivery и retry-воркеры напрямую создают или обновляют delivery_status в PostgreSQL. Перед обращением к провайдеру он равен pending; после попытки — success, fail или canceled. После успешной отправки receive_status устанавливается в sent и затем может перейти в delivered или read. Каждое изменение также публикуется в поток событий для ClickHouse.
 
           TODO: согласовать допустимые переходы, подтверждения доставки и историю для анонимных получателей.
         '''

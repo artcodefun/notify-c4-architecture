@@ -81,8 +81,8 @@ model {
             "campaign_id": "campaign-001",
             "status": "sending",
             "processed": 100,
-            "accepted": 98,
-            "failed": 2
+            "success": 98,
+            "fail": 2
           }
           ```
 
@@ -181,7 +181,8 @@ model {
             "items": [
               {
                 "notification_id": "notification-001",
-                "status": "sent",
+                "delivery_status": "success",
+                "receive_status": "sent",
                 "channel_type": "sms",
                 "channel_key": "channel-sms-1",
                 "category": "informational"
@@ -195,15 +196,15 @@ model {
         '''
       }
       status = service 'PUT /users/{user_id}/notifications/{notification_id}/status' {
-        summary 'Установить статус отправленного уведомления.'
+        summary 'Установить статус получения сообщения.'
         description '''
-          Предварительные статусы: sent, delivered, read, cancelled. Запись появляется в истории асинхронно после успешной отправки провайдеру или с cancelled при отмене либо истечении дедлайна. TODO: согласовать допустимые переходы, права, идемпотентность и поведение до появления записи.
+          receive_status: sent, delivered или read. delivery_status (pending, success, fail, canceled) устанавливается только delivery и retry-воркерами. TODO: согласовать допустимые переходы, права и идемпотентность.
 
           **Пример тела запроса:**
 
           ```json
           {
-            "status": "read"
+            "receive_status": "read"
           }
           ```
 
@@ -212,7 +213,7 @@ model {
           ```json
           {
             "notification_id": "notification-001",
-            "status": "read"
+            "receive_status": "read"
           }
           ```
         '''
