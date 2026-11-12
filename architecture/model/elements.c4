@@ -3,7 +3,7 @@ model {
     description 'Сервисы разных компаний: отправляют запросы на уведомления'
   }
   notify = system 'Notify' {
-    description 'Мультиарендный сервис доставки уведомлений'
+    description 'Мультиоператорский сервис доставки уведомлений'
     api = service 'REST API' {
       description 'Приём запросов и предоставление статусов'
     }
@@ -34,7 +34,7 @@ model {
      icon tech:kafka-icon
   }
   postgres = database 'PostgreSQL' {
-    description 'История уведомлений, настройки арендаторов, рассылки, каналы, статусы отправок'
+    description 'История уведомлений, настройки операторов, рассылки, каналы, статусы отправок'
     icon tech:postgresql
   }
   redis = database 'Redis' {

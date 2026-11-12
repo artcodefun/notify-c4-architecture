@@ -8,7 +8,7 @@ model {
           **Поля (предварительно):**
           ```go
           ID uuid.UUID
-          TenantID uuid.UUID
+          OperatorID uuid.UUID
           ChannelID uuid.UUID
           Category string
           Content NotificationContent
@@ -51,7 +51,7 @@ model {
           Recipients []string
           ```
 
-          **Правила:** порции добавляются до запуска; при подготовке разворачиваются в задания доставки. TODO: согласовать ограничения размера и идемпотентность добавления.
+          **Правила:** порции добавляются до запуска; при подготовке разворачиваются в задания доставки. `recipients` обязателен для всех типов получателей. TODO: согласовать ограничения размера, идемпотентность и отдельный механизм массовой рассылки всем пользователям.
         '''
       }
       progress = domain 'CampaignProgress' {
@@ -77,7 +77,7 @@ model {
           ```go
           DeliveryID uuid.UUID
           NotificationID uuid.UUID
-          TenantID uuid.UUID
+          OperatorID uuid.UUID
           CampaignID *uuid.UUID
           Recipient Recipient
           ChannelID uuid.UUID
@@ -95,7 +95,7 @@ model {
           **Поля (предварительно):**
           ```go
           ID uuid.UUID
-          TenantID uuid.UUID
+          OperatorID uuid.UUID
           Recipient Recipient
           ChannelID uuid.UUID
           CampaignID *uuid.UUID
@@ -130,28 +130,28 @@ model {
     }
     channels = domain 'Каналы и провайдеры' {
       channel = domain 'Channel' {
-        summary 'Настроенный канал отправки арендатора.'
+        summary 'Настроенный канал отправки оператора.'
         description '''
           **Поля (предварительно):**
           ```go
           ID uuid.UUID
-          TenantID uuid.UUID
+          OperatorID uuid.UUID
           ChannelKey string
           ChannelType ChannelType // sms | push | email
           ProviderID uuid.UUID
           Status ChannelStatus // provisioning | active | disabled
           ```
 
-          **Правила и операции:** канал принадлежит арендатору и использует одного провайдера; несколько каналов могут использовать одного провайдера. Канал можно активировать или отключить; его обработчики следуют состоянию канала. При создании рассылки через REST или Kafka канал выбирается по переданному ключу; без ключа сервис выбирает самый дешёвый подходящий канал указанного типа. TODO: определить расчёт стоимости, момент выбора и поведение, если подходящего канала нет.
+          **Правила и операции:** канал принадлежит оператору и использует одного провайдера; несколько каналов могут использовать одного провайдера. Канал можно активировать или отключить; его обработчики следуют состоянию канала. При создании рассылки через REST или Kafka канал выбирается по переданному ключу; без ключа сервис выбирает самый дешёвый подходящий канал указанного типа. TODO: определить расчёт стоимости, момент выбора и поведение, если подходящего канала нет.
         '''
       }
       provider = domain 'Provider' {
-        summary 'Конфигурация провайдера доставки арендатора.'
+        summary 'Конфигурация провайдера доставки оператора.'
         description '''
           **Поля (предварительно):**
           ```go
           ID uuid.UUID
-          TenantID uuid.UUID
+          OperatorID uuid.UUID
           ProviderType string
           Settings any
           Status ConfigurationStatus // active | disabled
@@ -169,7 +169,7 @@ model {
           **Поля (предварительно):**
           ```go
           ID uuid.UUID
-          TenantID uuid.UUID
+          OperatorID uuid.UUID
           Platform MobilePlatform // android | ios
           PackageName string
           ProviderID *uuid.UUID
@@ -182,11 +182,11 @@ model {
     }
     users = domain 'Пользователи и контакты' {
       user = domain 'User' {
-        summary 'Локальное представление пользователя арендатора.'
+        summary 'Локальное представление пользователя оператора.'
         description '''
           **Поля (предварительно):**
           ```go
-          TenantID uuid.UUID
+          OperatorID uuid.UUID
           UserID string
           Status UserStatus // active | deleted
           ```
@@ -199,15 +199,15 @@ model {
         description '''
           **Поля (предварительно):**
           ```go
-          TenantID uuid.UUID
+          OperatorID uuid.UUID
           UserID string
           Phone string
-          Operator *string
+          MobileOperator *string
           Region *string
           UpdatedAt time.Time
           ```
 
-          **Операции:** обновить или удалить телефон по событию внешней системы. Оператор и регион необязательны. TODO: определить источник и актуальность сведений, а также их возможное использование при выборе провайдера.
+          **Операции:** обновить или удалить телефон по событию внешней системы. Оператор мобильной сети и регион необязательны. TODO: определить источник и актуальность сведений, а также их возможное использование при выборе провайдера.
         '''
       }
       email = domain 'UserEmail' {
@@ -215,7 +215,7 @@ model {
         description '''
           **Поля (предварительно):**
           ```go
-          TenantID uuid.UUID
+          OperatorID uuid.UUID
           UserID string
           Email string
           MailService *string
@@ -230,7 +230,7 @@ model {
         description '''
           **Поля (предварительно):**
           ```go
-          TenantID uuid.UUID
+          OperatorID uuid.UUID
           UserID string
           MobileApplicationID uuid.UUID
           InstallationID string
@@ -243,9 +243,9 @@ model {
         '''
       }
     }
-    access = domain 'Арендаторы и доступ' {
-      tenant = domain 'Tenant' {
-        summary 'Арендатор сервиса уведомлений.'
+    access = domain 'Операторы и доступ' {
+      operator = domain 'Operator' {
+        summary 'Оператор сотовой связи, использующий сервис уведомлений.'
         description '''
           **Поля (предварительно):**
           ```go
@@ -255,16 +255,16 @@ model {
           RateLimitPerMinute int
           ```
 
-          **Операции:** включить или отключить арендатора, изменить лимит. Настройки, каналы и данные принадлежат конкретному арендатору.
+          **Операции:** включить или отключить оператора, изменить лимит. Настройки, каналы и данные принадлежат конкретному оператору.
         '''
       }
-      key = domain 'TenantApiKey' {
+      key = domain 'OperatorApiKey' {
         summary 'Ключ доступа вызывающей системы.'
         description '''
           **Поля (предварительно):**
           ```go
           ID uuid.UUID
-          TenantID uuid.UUID
+          OperatorID uuid.UUID
           Name string
           KeyHash string
           CreatedAt time.Time
@@ -277,12 +277,12 @@ model {
     }
     templates = domain 'Шаблоны' {
       template = domain 'Template' {
-        summary 'Возможный шаблон уведомления арендатора.'
+        summary 'Возможный шаблон уведомления оператора.'
         description '''
           **Поля (предварительно):**
           ```go
           ID uuid.UUID
-          TenantID uuid.UUID
+          OperatorID uuid.UUID
           Name string
           ChannelType ChannelType // sms | push | email
           Content any
@@ -295,7 +295,7 @@ model {
     }
   }
 
-  notify.domain.campaigns.campaign -> notify.domain.access.tenant 'Принадлежит арендатору'
+  notify.domain.campaigns.campaign -> notify.domain.access.operator 'Принадлежит оператору'
   notify.domain.campaigns.campaign -> notify.domain.channels.channel 'Использует канал'
   notify.domain.campaigns.batch -> notify.domain.campaigns.campaign 'Принадлежит рассылке'
   notify.domain.campaigns.batch -> notify.domain.campaigns.recipient 'Содержит получателей'
@@ -307,13 +307,13 @@ model {
   notify.domain.channels.channel -> notify.domain.channels.provider 'Использует провайдера'
   notify.domain.channels.application -> notify.domain.channels.provider 'Может использовать провайдера'
   notify.domain.channels.channel -> notify.domain.channels.application 'Может поддерживать приложение'
-  notify.domain.users.user -> notify.domain.access.tenant 'Принадлежит арендатору'
+  notify.domain.users.user -> notify.domain.access.operator 'Принадлежит оператору'
   notify.domain.users.phone -> notify.domain.users.user 'Принадлежит пользователю'
   notify.domain.users.email -> notify.domain.users.user 'Принадлежит пользователю'
   notify.domain.users.token -> notify.domain.users.user 'Принадлежит пользователю'
   notify.domain.users.token -> notify.domain.channels.application 'Относится к приложению'
-  notify.domain.access.key -> notify.domain.access.tenant 'Принадлежит арендатору'
-  notify.domain.templates.template -> notify.domain.access.tenant 'Принадлежит арендатору'
+  notify.domain.access.key -> notify.domain.access.operator 'Принадлежит оператору'
+  notify.domain.templates.template -> notify.domain.access.operator 'Принадлежит оператору'
 }
 
 views {
@@ -339,7 +339,7 @@ views {
     autoLayout LeftRight
   }
   view domain_access of notify.domain.access {
-    title 'Домен — арендаторы и доступ'
+    title 'Домен — операторы и доступ'
     include *
     autoLayout LeftRight
   }

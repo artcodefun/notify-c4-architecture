@@ -5,7 +5,7 @@ model {
       create = service 'POST /campaigns' {
         summary 'Создать рассылку.'
         description '''
-          channel_type обязателен: sms, push или email. category — обязательная строковая категория, которую вызывающая система задаёт для последующей фильтрации истории уведомлений. Необязательный channel_key задаёт конкретный канал арендатора; без ключа выбирается самый дешёвый подходящий канал указанного типа. TODO: согласовать остальные поля, сроки и идемпотентность.
+          channel_type обязателен: sms, push или email. category — обязательная строковая категория, которую вызывающая система задаёт для последующей фильтрации истории уведомлений. Необязательный channel_key задаёт конкретный канал оператора; без ключа выбирается самый дешёвый подходящий канал указанного типа. TODO: согласовать остальные поля, сроки и идемпотентность.
 
           **Пример тела запроса:**
 
@@ -36,7 +36,7 @@ model {
       inline = service 'POST /campaigns/inline' {
         summary 'Создать и запланировать небольшую рассылку.'
         description '''
-          channel_type обязателен: sms, push или email. category — обязательная строковая категория, которую вызывающая система задаёт для последующей фильтрации истории уведомлений. Необязательный channel_key задаёт конкретный канал арендатора; без ключа выбирается самый дешёвый подходящий канал указанного типа. TODO: решить, нужен ли отдельный inline-сценарий и каковы его пределы.
+          channel_type обязателен: sms, push или email. category — обязательная строковая категория, которую вызывающая система задаёт для последующей фильтрации истории уведомлений. Аудитория задаётся так же, как для порции: обязательны recipient_type (user_id, phone, email или push_token) и непустой recipients. Необязательный channel_key задаёт конкретный канал оператора; без ключа выбирается самый дешёвый подходящий канал указанного типа. TODO: решить, нужен ли отдельный inline-сценарий и каковы его пределы.
 
           **Пример тела запроса:**
 
@@ -49,6 +49,7 @@ model {
               "body": "Ваша заявка обработана"
             },
             "priority": "normal",
+            "recipient_type": "user_id",
             "recipients": [
               "user-456"
             ],
@@ -91,7 +92,7 @@ model {
       batch = service 'POST /campaigns/{campaign_id}/recipients/batch' {
         summary 'Добавить порцию аудитории.'
         description '''
-          Допустимые recipient_type: user_id, phone, email, push_token. Для анонимных получателей передаются непосредственные адреса. TODO: определить идемпотентность, ограничения и правила проверки адресов.
+          Допустимые recipient_type: user_id, phone, email, push_token. Для анонимных получателей передаются непосредственные адреса. recipients обязателен и не может быть пустым. TODO: определить идемпотентность, ограничения и правила проверки адресов.
 
           **Пример тела запроса:**
 
@@ -219,7 +220,7 @@ model {
     }
     channels = service 'Каналы' {
       list = service 'GET /channels' {
-        summary 'Получить список каналов арендатора.'
+        summary 'Получить список каналов оператора.'
         description '''
           TODO: согласовать отображаемые настройки и пагинацию.
 
@@ -288,7 +289,7 @@ model {
     }
     providers = service 'Провайдеры' {
       list = service 'GET /providers' {
-        summary 'Получить список провайдеров арендатора.'
+        summary 'Получить список провайдеров оператора.'
         description '''
           TODO: определить поля и пагинацию.
 
@@ -479,8 +480,8 @@ model {
       }
     }
     admin = service 'Администрирование' {
-      tenants_list = service 'GET /internal/tenants' {
-        summary 'Получить список арендаторов.'
+      operators_list = service 'GET /internal/operators' {
+        summary 'Получить список операторов.'
         description '''
           Внутренняя операция. TODO: согласовать модель доступа.
 
@@ -490,7 +491,7 @@ model {
           {
             "items": [
               {
-                "tenant_id": "company-123",
+                "operator_id": "company-123",
                 "name": "Компания"
               }
             ]
@@ -500,8 +501,8 @@ model {
           Примеры предварительные; коды ответов и ошибки требуют согласования.
         '''
       }
-      tenants_create = service 'POST /internal/tenants' {
-        summary 'Создать арендатора.'
+      operators_create = service 'POST /internal/operators' {
+        summary 'Создать оператора.'
         description '''
           Внутренняя операция. TODO: согласовать права и процесс подключения.
 
@@ -517,7 +518,7 @@ model {
 
           ```json
           {
-            "tenant_id": "company-123",
+            "operator_id": "company-123",
             "status": "active"
           }
           ```
@@ -525,8 +526,8 @@ model {
           Примеры предварительные; коды ответов и ошибки требуют согласования.
         '''
       }
-      keys_create = service 'POST /internal/tenant-api-keys' {
-        summary 'Выпустить ключ доступа арендатора.'
+      keys_create = service 'POST /internal/operator-api-keys' {
+        summary 'Выпустить ключ доступа оператора.'
         description '''
           Внутренняя операция. TODO: согласовать выпуск и однократный показ секрета.
 
@@ -534,7 +535,7 @@ model {
 
           ```json
           {
-            "tenant_id": "company-123",
+            "operator_id": "company-123",
             "name": "service-a"
           }
           ```
@@ -551,7 +552,7 @@ model {
           Примеры предварительные; коды ответов и ошибки требуют согласования.
         '''
       }
-      keys_revoke = service 'DELETE /internal/tenant-api-keys/{api_key_id}' {
+      keys_revoke = service 'DELETE /internal/operator-api-keys/{api_key_id}' {
         summary 'Отозвать ключ доступа.'
         description '''
           Внутренняя операция. TODO: определить аудит и порядок отзыва.

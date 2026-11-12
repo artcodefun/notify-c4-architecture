@@ -3,11 +3,11 @@ model {
   extend redis {
     cache = database 'Кэш данных' {
       description 'Кэш для уменьшения чтений PostgreSQL.'
-      tenants = database 'Арендаторы' {
-        summary 'Кэш настроек и состояния арендаторов.'
+      operators = database 'Операторы' {
+        summary 'Кэш настроек и состояния операторов.'
       }
       channels = database 'Каналы' {
-        summary 'Кэш настроек каналов арендаторов.'
+        summary 'Кэш настроек каналов операторов.'
       }
       providers = database 'Провайдеры' {
         summary 'Кэш конфигурации провайдеров.'
@@ -25,10 +25,10 @@ model {
 
     }
     limits = database 'Ограничение скорости' {
-      description 'Распределённые token bucket на уровнях арендатора и провайдера. Разрешения списываются из обоих атомарно одной Lua-операцией с использованием времени Redis.'
-      tenant = database 'Лимиты арендаторов' {
-        summary 'Общая квота арендатора: распределённый token bucket.'
-        description 'Ключ: tenant:{tenant_id}. Квота в минуту переводится в скорость в секунду; bucket пополняется непрерывно.'
+      description 'Распределённые token bucket на уровнях оператора и провайдера. Разрешения списываются из обоих атомарно одной Lua-операцией с использованием времени Redis.'
+      operator = database 'Лимиты операторов' {
+        summary 'Общая квота оператора: распределённый token bucket.'
+        description 'Ключ: operator:{operator_id}. Квота в минуту переводится в скорость в секунду; bucket пополняется непрерывно.'
       }
       provider = database 'Лимиты провайдеров' {
         summary 'Квота экземпляра провайдера: распределённый token bucket.'

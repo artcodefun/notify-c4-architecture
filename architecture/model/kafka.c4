@@ -1,6 +1,6 @@
 // Черновик: имена, структуры и топология подлежат согласованию. JSON — примеры, не контракты.
 model {
-  user_service = system 'Сервис пользователей' {
+  user_service = system 'Сервис пользователей (ЕСА)' {
     description 'Источник данных о пользователях и их контактах для Notify.'
   }
   extend kafka {
@@ -14,7 +14,7 @@ model {
           ```json
           {
             "event_id": "evt-001",
-            "tenant_id": "company-123",
+            "operator_id": "company-123",
             "occurred_at": "2026-11-10T12:00:00Z",
             "type": "user.created",
             "user_id": "user-456"
@@ -30,7 +30,7 @@ model {
           ```json
           {
             "event_id": "evt-001",
-            "tenant_id": "company-123",
+            "operator_id": "company-123",
             "occurred_at": "2026-11-10T12:00:00Z",
             "type": "user.phone.updated",
             "user_id": "user-456",
@@ -47,7 +47,7 @@ model {
           ```json
           {
             "event_id": "evt-001",
-            "tenant_id": "company-123",
+            "operator_id": "company-123",
             "occurred_at": "2026-11-10T12:00:00Z",
             "type": "user.email.updated",
             "user_id": "user-456",
@@ -64,7 +64,7 @@ model {
           ```json
           {
             "event_id": "evt-001",
-            "tenant_id": "company-123",
+            "operator_id": "company-123",
             "occurred_at": "2026-11-10T12:00:00Z",
             "type": "user.push_token.updated",
             "user_id": "user-456",
@@ -77,23 +77,24 @@ model {
       }
     }
     campaign_requests = broker 'Внешнее управление рассылками' {
-      description 'Запросы других сервисов на создание inline-рассылок одному пользователю.'
+      description 'Запросы других сервисов на создание inline-рассылок.'
       send = broker 'notify.campaign.inline.create.v1' {
-        summary 'Внешний сервис → consumer Notify. Запрос на inline-рассылку одному пользователю по типу канала.'
+        summary 'Внешний сервис → consumer Notify. Запрос на inline-рассылку по типу канала.'
         description '''
-          Внешний сервис передаёт уникальный campaign_id; Notify использует его как идентификатор inline-рассылки на одного пользователя. Повтор того же запроса не должен создавать новую рассылку. Обязательны channel_type (sms, push или email) и строковая category для последующей фильтрации истории уведомлений. Необязательный channel_key задаёт конкретный канал арендатора; без него сервис выбирает самый дешёвый подходящий канал указанного типа. deadline_at необязателен. Если пользователя или адреса нет, отправка завершается ошибкой.
+          Необязательный `campaign_id` — UUID, который вызывающий сервис задаёт, если хочет отслеживать последующие изменения рассылки; при наличии он также обеспечивает идемпотентность: повтор того же запроса не создаёт новую рассылку. Без campaign_id Notify создаёт внутренний идентификатор рассылки. Обязательны channel_type (sms, push или email), строковая category, recipient_type (user_id, phone, email или push_token) и непустой recipients. Необязательный channel_key задаёт конкретный канал оператора; без него сервис выбирает самый дешёвый подходящий канал указанного типа. deadline_at необязателен. Если пользователя или адреса нет, соответствующая отправка завершается ошибкой.
 
           **Пример сообщения — черновик:**
 
           ```json
           {
             "campaign_id": "018f6b7a-6d80-7ac1-9e15-c1261cd9b021",
-            "tenant_id": "company-123",
-            "user_id": "user-456",
+            "operator_id": "company-123",
             "type": "campaign.inline.create",
             "channel_type": "sms",
             "channel_key": "channel-sms-twilio-325",
             "category": "informational",
+            "recipient_type": "user_id",
+            "recipients": ["user-456"],
             "deadline_at": "2026-11-10T13:00:00Z",
             "payload": {
               "title": "Заявка",
@@ -114,7 +115,7 @@ model {
           ```json
           {
             "campaign_id": "campaign-001",
-            "tenant_id": "company-123",
+            "operator_id": "company-123",
             "run_id": "run-001"
           }
           ```
@@ -128,7 +129,7 @@ model {
           ```json
           {
             "campaign_id": "campaign-001",
-            "tenant_id": "company-123",
+            "operator_id": "company-123",
             "run_id": "run-001",
             "batch_id": "batch-001"
           }
@@ -143,7 +144,7 @@ model {
           ```json
           {
             "campaign_id": "campaign-001",
-            "tenant_id": "company-123",
+            "operator_id": "company-123",
             "run_id": "run-001",
             "batch_id": "batch-001"
           }
@@ -152,9 +153,9 @@ model {
       }
     }
     channels = broker 'Внутренние топики доставки' {
-      description 'Для каждого настроенного канала арендатора создаются три топика доставки по приоритетам и три топика повторов по интервалам.'
+      description 'Для каждого настроенного канала оператора создаются три топика доставки по приоритетам и три топика повторов по интервалам.'
       delivery_critical = broker 'notify.delivery.critical.{channel_id}' {
-        summary 'Задания доставки приоритета critical для конкретного канала арендатора.'
+        summary 'Задания доставки приоритета critical для конкретного канала оператора.'
         description '''
           **Пример сообщения — черновик:**
 
@@ -167,7 +168,7 @@ model {
               "delivery_id": "delivery-001",
               "notification_id": "notification-001",
               "campaign_id": "campaign-001",
-              "tenant_id": "company-123",
+              "operator_id": "company-123",
               "user_id": "user-456",
               "channel_id": "channel-sms-1",
               "category": "informational",
@@ -179,7 +180,7 @@ model {
         '''
       }
       delivery_high = broker 'notify.delivery.high.{channel_id}' {
-        summary 'Задания доставки приоритета high для конкретного канала арендатора.'
+        summary 'Задания доставки приоритета high для конкретного канала оператора.'
         description '''
           **Пример сообщения — черновик:**
 
@@ -192,7 +193,7 @@ model {
               "delivery_id": "delivery-001",
               "notification_id": "notification-001",
               "campaign_id": "campaign-001",
-              "tenant_id": "company-123",
+              "operator_id": "company-123",
               "user_id": "user-456",
               "channel_id": "channel-sms-1",
               "category": "informational",
@@ -204,7 +205,7 @@ model {
         '''
       }
       delivery_normal = broker 'notify.delivery.normal.{channel_id}' {
-        summary 'Задания доставки приоритета normal для конкретного канала арендатора.'
+        summary 'Задания доставки приоритета normal для конкретного канала оператора.'
         description '''
           **Пример сообщения — черновик:**
 
@@ -217,7 +218,7 @@ model {
               "delivery_id": "delivery-001",
               "notification_id": "notification-001",
               "campaign_id": "campaign-001",
-              "tenant_id": "company-123",
+              "operator_id": "company-123",
               "user_id": "user-456",
               "channel_id": "channel-sms-1",
               "category": "informational",
@@ -242,7 +243,7 @@ model {
               "delivery_id": "delivery-001",
               "notification_id": "notification-001",
               "campaign_id": "campaign-001",
-              "tenant_id": "company-123",
+              "operator_id": "company-123",
               "user_id": "user-456",
               "channel_id": "channel-sms-1",
               "category": "informational",
@@ -268,7 +269,7 @@ model {
               "delivery_id": "delivery-001",
               "notification_id": "notification-001",
               "campaign_id": "campaign-001",
-              "tenant_id": "company-123",
+              "operator_id": "company-123",
               "user_id": "user-456",
               "channel_id": "channel-sms-1",
               "category": "informational",
@@ -294,7 +295,7 @@ model {
               "delivery_id": "delivery-001",
               "notification_id": "notification-001",
               "campaign_id": "campaign-001",
-              "tenant_id": "company-123",
+              "operator_id": "company-123",
               "user_id": "user-456",
               "channel_id": "channel-sms-1",
               "category": "informational",
@@ -317,7 +318,7 @@ model {
           ```json
           {
             "event_id": "evt-002",
-            "tenant_id": "company-123",
+            "operator_id": "company-123",
             "campaign_id": "campaign-001",
             "type": "delivery.completed",
             "accepted_delta": 1,
@@ -333,7 +334,7 @@ model {
 
           ```json
           {
-            "tenant_id": "company-123",
+            "operator_id": "company-123",
             "campaign_id": "campaign-001",
             "processed": 100,
             "accepted": 98,
@@ -353,7 +354,7 @@ model {
             "schema_version": 1,
             "payload": {
               "notification_id": "notification-001",
-              "tenant_id": "company-123",
+              "operator_id": "company-123",
               "user_id": "user-456",
               "channel_id": "channel-sms-1",
               "category": "informational",
@@ -375,7 +376,7 @@ model {
           ```json
           {
             "event_id": "evt-001",
-            "tenant_id": "company-123",
+            "operator_id": "company-123",
             "occurred_at": "2026-11-10T12:00:00Z",
             "type": "delivery.failed",
             "delivery_id": "delivery-002",
