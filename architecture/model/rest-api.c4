@@ -78,7 +78,7 @@ model {
       get = service 'GET /campaigns/{campaign_id}' {
         summary 'Получить состояние и прогресс рассылки.'
         description '''
-          TODO: определить статусы и состав прогресса.
+          Прогресс содержит счётчики обработанных сообщений и terminal-статусов success, fail и canceled. TODO: определить статусы кампании и дополнительные поля прогресса.
 
           **Пример тела ответа:**
 
@@ -88,7 +88,8 @@ model {
             "status": "sending",
             "processed": 100,
             "success": 98,
-            "fail": 2
+            "fail": 1,
+            "canceled": 1
           }
           ```
 

@@ -75,7 +75,7 @@ model {
       campaigns = database 'campaigns' {
         summary 'Состояние и настройки массовых рассылок.'
         description '''
-          **Предварительные поля:** `id`, `operator_id`, `channel_id`, `category`, `status`, `priority`, `content`, `scheduled_at`, `deadline_at`, `cancelled_at`, `run_id`, `created_at`. content хранит канонический payload с title, body, image_url и data. `category` передаётся вызывающей системой и сохраняется для фильтрации истории уведомлений. Рассылка создаётся до отправки, аудитория загружается порциями, затем рассылка запускается.
+          **Предварительные поля:** `id`, `operator_id`, `channel_id`, `category`, `status`, `priority`, `content`, `scheduled_at`, `deadline_at`, `cancelled_at`, `run_id`, `created_at`, `progress`. content хранит канонический payload с title, body, image_url и data. progress агрегируется из текущих состояний сообщений в PostgreSQL и содержит счётчики success, fail и canceled. `category` передаётся вызывающей системой и сохраняется для фильтрации истории уведомлений. Рассылка создаётся до отправки, аудитория загружается порциями, затем рассылка запускается.
         '''
       }
       batches = database 'campaign_recipient_batches' {

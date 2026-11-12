@@ -65,9 +65,10 @@ model {
           DeliveryProcessed int
           DeliverySuccessCount int
           DeliveryFailCount int
+          DeliveryCanceledCount int
           ```
 
-          **Операции:** учитывать подготовленные порции и текущее состояние сообщений из PostgreSQL; определять завершение обработки. TODO: согласовать счётчики отменённых и просроченных заданий и правило завершения.
+          **Операции:** учитывать подготовленные порции и текущее состояние сообщений из PostgreSQL; определять завершение обработки. DeliveryCanceledCount включает сообщения, отменённые пользователем, дедлайном или UserDeliveryOptOut. TODO: согласовать правило завершения.
         '''
       }
       work = domain 'DeliveryWork' {
