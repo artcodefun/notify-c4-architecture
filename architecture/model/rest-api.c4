@@ -39,7 +39,7 @@ model {
       inline = service 'POST /campaigns/inline' {
         summary 'Создать и запланировать небольшую рассылку.'
         description '''
-          channel_type обязателен: sms, push или email. Ровно одно из payload или template обязательно. payload имеет единый формат: title, body, image_url и data; адаптер выбранного канала использует только поддерживаемые поля. template передаёт key и данные подстановки для адресатов. category — обязательная строковая категория, которую вызывающая система задаёт для последующей фильтрации истории уведомлений. Аудитория задаётся так же, как для порции: обязательны recipient_type (user_id, phone, email или push_token) и непустой recipients. API сохраняет её неизменяемым inline_batch вместе с кампанией до публикации запуска. Необязательный channel_key задаёт конкретный канал оператора; без ключа сервис выбирает самый дешёвый подходящий канал указанного типа. TODO: решить пределы inline-сценария.
+          channel_type обязателен: sms, push или email. Ровно одно из payload или template обязательно. payload имеет единый формат: title, body, image_url и data; адаптер выбранного канала использует только поддерживаемые поля. template передаёт key и данные подстановки для адресатов. category — обязательная строковая категория, которую вызывающая система задаёт для последующей фильтрации истории уведомлений. Аудитория задаётся так же, как для порции: обязательны recipient_type (user_id, phone, email или push_token) и непустой recipients. API сохраняет её неизменяемым inline_batch вместе с кампанией. Если scheduled_at не задан или уже наступил, кампания сохраняется в started и сразу публикуется в inline run; если время в будущем — в scheduled, а запуск публикует scheduler. Необязательный channel_key задаёт конкретный канал оператора; без ключа сервис выбирает самый дешёвый подходящий канал указанного типа. TODO: решить пределы inline-сценария.
 
           **Пример тела запроса:**
 
@@ -88,7 +88,7 @@ model {
           ```json
           {
             "campaign_id": "campaign-001",
-            "status": "sending",
+            "status": "started",
             "processed": 100,
             "success": 98,
             "fail": 1,
@@ -165,7 +165,7 @@ model {
       cancel = service 'POST /campaigns/{campaign_id}/cancel' {
         summary 'Запросить отмену рассылки.'
         description '''
-          Фиксирует cancelled_at и обновляет или инвалидирует кэш рассылки. Воркеры проверяют отмену при обработке; уже принятые провайдером сообщения не отзываются. TODO: определить допустимую задержку обновления кэша и поведение запросов, уже выполняющихся у провайдера.
+          Фиксирует cancelled_at, не вводя отдельного статуса отмены, и обновляет или инвалидирует кэш рассылки. Воркеры проверяют отмену при обработке; уже принятые провайдером сообщения не отзываются. TODO: определить допустимую задержку обновления кэша и поведение запросов, уже выполняющихся у провайдера.
 
           **Пример тела запроса:**
 
@@ -178,7 +178,8 @@ model {
           ```json
           {
             "campaign_id": "campaign-001",
-            "status": "cancelling"
+            "status": "started",
+            "cancelled_at": "2026-11-11T09:30:00Z"
           }
           ```
 
@@ -300,8 +301,8 @@ model {
           {
             "items": [
               {
-                "channel": "channel-sms-1",
-                "type": "sms",
+                "channel_key": "channel-sms-1",
+                "channel_type": "sms",
                 "status": "active"
               }
             ]
@@ -314,14 +315,14 @@ model {
       create = service 'POST /channels' {
         summary 'Создать канал уведомлений.'
         description '''
-          Для push mobile_application_id обязателен и может использоваться только одним каналом. Для SMS и email mobile_application_id запрещён.
+          Для push mobile_application_id обязателен и может использоваться только одним каналом; provider_id приложения должен совпадать с provider_id создаваемого канала. Для SMS и email mobile_application_id запрещён.
 
           **Пример тела запроса:**
 
           ```json
           {
-            "channel": "channel-push-1",
-            "type": "push",
+            "channel_key": "channel-push-1",
+            "channel_type": "push",
             "provider_id": "provider-001",
             "mobile_application_id": "app-001"
           }
@@ -331,7 +332,7 @@ model {
 
           ```json
           {
-            "channel": "channel-push-1",
+            "channel_key": "channel-push-1",
             "mobile_application_id": "app-001",
             "status": "provisioning"
           }
@@ -349,8 +350,8 @@ model {
 
           ```json
           {
-            "channel": "channel-push-1",
-            "type": "push",
+            "channel_key": "channel-push-1",
+            "channel_type": "push",
             "mobile_application_id": "app-001",
             "status": "active"
           }
