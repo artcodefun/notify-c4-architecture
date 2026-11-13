@@ -81,7 +81,7 @@ model {
       send = broker 'notify.campaign.inline.create.v1' {
         summary 'Внешний сервис → consumer Notify. Запрос на inline-рассылку по типу канала.'
         description '''
-          Необязательный `campaign_id` — UUID, который вызывающий сервис задаёт, если хочет отслеживать последующие изменения рассылки; при наличии он также обеспечивает идемпотентность: повтор того же запроса не создаёт новую рассылку. Без campaign_id Notify создаёт внутренний идентификатор рассылки. Обязательны channel_type (sms, push или email), строковая category, recipient_type (user_id, phone, email или push_token) и непустой recipients. payload имеет единый формат: title, body, image_url и data; адаптер выбранного канала использует только поддерживаемые поля. Необязательный channel_key задаёт конкретный канал оператора; без него сервис выбирает самый дешёвый подходящий канал указанного типа. deadline_at необязателен. Если пользователя или адреса нет, соответствующая отправка завершается ошибкой.
+          Необязательный `campaign_id` — UUID, который вызывающий сервис задаёт, если хочет отслеживать последующие изменения рассылки; при наличии он также обеспечивает идемпотентность: повтор того же запроса не создаёт новую рассылку. Без campaign_id Notify создаёт внутренний идентификатор рассылки. Обязательны channel_type (sms, push или email), строковая category, recipient_type (user_id, phone, email или push_token) и непустой recipients. Ровно одно из payload или template обязательно. payload имеет единый формат: title, body, image_url и data; template передаёт key и recipient_data. recipient в recipient_data должен совпадать со значением recipients; дубли и неизвестные значения отклоняются. Consumer сохраняет кампанию и неизменяемый inline_batch одной транзакцией до публикации запуска. Необязательный channel_key задаёт конкретный канал оператора; без него сервис выбирает самый дешёвый подходящий канал указанного типа. deadline_at необязателен. Если пользователя или адреса нет, соответствующая отправка завершается ошибкой.
 
           **Пример сообщения — черновик:**
 
@@ -96,11 +96,14 @@ model {
             "recipient_type": "user_id",
             "recipients": ["user-456"],
             "deadline_at": "2026-11-10T13:00:00Z",
-            "payload": {
-              "title": "Заявка",
-              "body": "Ваша заявка обработана",
-              "image_url": "https://example.com/banner.png",
-              "data": {"application_id": "123"}
+            "template": {
+              "key": "hello_template",
+              "recipient_data": [
+                {
+                  "recipient": "user-456",
+                  "data": {"name": "Виктор"}
+                }
+              ]
             }
           }
           ```
@@ -145,7 +148,7 @@ model {
         '''
       }
       inline_run = broker 'notify.campaign.inline.run.v1' {
-        summary 'Kafka consumer → worker. Запуск inline-рассылки после её создания.'
+        summary 'API или Kafka consumer → worker. Запуск inline-рассылки после её создания.'
         description '''
           **Пример сообщения — черновик:**
 
@@ -164,7 +167,7 @@ model {
       inline_fanout = broker 'notify.campaign.inline.fanout.v1' {
         summary 'Worker → worker. Разворачивание аудитории inline-рассылки в задания доставки.'
         description '''
-          Inline-аудитория неизменяема после создания кампании, поэтому событие несёт campaign_id и recipients; worker загружает остальные данные кампании из PostgreSQL.
+          Inline-аудитория неизменяема после создания кампании и хранится в campaigns.inline_batch. Producer читает её из PostgreSQL; событие несёт campaign_id и recipients, а consumer загружает остальные данные кампании и данные шаблона из PostgreSQL.
 
           **Пример сообщения — черновик:**
 

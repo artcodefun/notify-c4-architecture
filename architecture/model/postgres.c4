@@ -75,13 +75,13 @@ model {
       campaigns = database 'campaigns' {
         summary 'Состояние и настройки массовых рассылок.'
         description '''
-          **Предварительные поля:** `id`, `operator_id`, `channel_id`, `category`, `status`, `priority`, `content`, `scheduled_at`, `deadline_at`, `cancelled_at`, `run_id`, `created_at`, `progress`. content хранит канонический payload с title, body, image_url и data. progress агрегируется из текущих состояний сообщений в PostgreSQL и содержит счётчики success, fail и canceled. `category` передаётся вызывающей системой и сохраняется для фильтрации истории уведомлений. Рассылка создаётся до отправки, аудитория загружается порциями, затем рассылка запускается.
+          **Предварительные поля:** `id`, `operator_id`, `channel_id`, `category`, `status`, `priority`, `payload` (nullable), `template_id` (nullable), `template_version` (nullable), `audience_mode`, `inline_batch` (JSONB, nullable), `scheduled_at`, `deadline_at`, `cancelled_at`, `run_id`, `created_at`, `progress`. Ровно один из payload или template_id обязателен. payload хранит канонический набор title, body, image_url и data; template_version фиксируется при создании кампании. audience_mode: batched или inline. Для inline `inline_batch` обязателен и хранит recipient_type, непустой recipients и, для шаблона, template_recipient_data; для batched он NULL, а аудитория находится в campaign_recipient_batches. CHECK связывает режим и наличие inline_batch; значение неизменно после создания кампании. progress агрегируется из текущих состояний сообщений в PostgreSQL и содержит счётчики success, fail и canceled. `category` передаётся вызывающей системой и сохраняется для фильтрации истории уведомлений. Кампания и её inline_batch сохраняются одной транзакцией до публикации запуска.
         '''
       }
       batches = database 'campaign_recipient_batches' {
         summary 'Порции аудитории массовых рассылок.'
         description '''
-          **Предварительные поля:** `id`, `campaign_id`, `recipient_type`, `recipients`, `created_at`. Допустимые recipient_type: user_id, phone, email, push_token; recipients содержит идентификаторы или адреса соответствующего типа и обязателен для каждого типа.
+          **Предварительные поля:** `id`, `campaign_id`, `recipient_type`, `recipients`, `template_recipient_data`, `created_at`. Допустимые recipient_type: user_id, phone, email, push_token; recipients содержит идентификаторы или адреса соответствующего типа и обязателен для каждого типа. template_recipient_data хранит массив объектов recipient и data только для кампаний с шаблоном.
         '''
       }
     }
@@ -90,13 +90,13 @@ model {
       templates = database 'templates' {
         summary 'Шаблоны уведомлений операторов.'
         description '''
-          **Предварительные поля:** `id`, `operator_id`, `name`, `channel_type`, `created_at`, `updated_at`.
+          **Предварительные поля:** `id`, `operator_id`, `key`, `channel_type`, `created_at`, `updated_at`. key уникален в пределах оператора.
         '''
       }
       versions = database 'template_versions' {
         summary 'Версии шаблонов и содержимое.'
         description '''
-          **Предварительные поля:** `id`, `template_id`, `version`, `content`, `created_at`. content использует тот же канонический payload с title, body, image_url и data.
+          **Предварительные поля:** `id`, `template_id`, `version`, `payload`, `created_at`. payload использует тот же канонический набор title, body, image_url и data, но строковые значения могут содержать плейсхолдеры вида `{name}`.
         '''
       }
     }

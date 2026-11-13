@@ -11,7 +11,10 @@ model {
           OperatorID uuid.UUID
           ChannelID uuid.UUID
           Category string
-          Content NotificationContent
+          Payload *NotificationContent
+          Template *TemplateReference
+          AudienceMode CampaignAudienceMode // batched | inline
+          InlineBatch *InlineRecipientBatch
           Priority Priority // critical | high | normal
           Status CampaignStatus // draft | scheduled | starting | started | completed | failed (предварительно)
           ScheduledAt *time.Time
@@ -21,7 +24,7 @@ model {
           Progress *CampaignProgress
           ```
 
-          **Правила и операции:** создать рассылку; добавлять порции аудитории до запуска; запустить немедленно или запланировать, закрыв загрузку; зафиксировать отмену. `category` — обязательная строка, которую задаёт вызывающая система для последующей фильтрации истории. Перед отправкой и повтором проверяются отмена и дедлайн. Новый `run_id` отсеивает устаревшие запуски.
+          **Правила и операции:** создать рассылку; добавлять порции аудитории до запуска; запустить немедленно или запланировать, закрыв загрузку; зафиксировать отмену. Задаётся ровно один из payload или template. При template Notify фиксирует конкретную версию шаблона при создании кампании. `category` — обязательная строка, которую задаёт вызывающая система для последующей фильтрации истории. Перед отправкой и повтором проверяются отмена и дедлайн. Новый `run_id` отсеивает устаревшие запуски. Для `batched` аудитория хранится порциями; для `inline` обязательный InlineBatch — неизменяемый снимок аудитории из запроса, сохраняемый одновременно с кампанией.
 
           TODO: согласовать состояния, переходы, итог отмены и дедлайна, а также правила обработки inline-рассылок.
         '''
@@ -49,9 +52,23 @@ model {
           CampaignID uuid.UUID
           RecipientType RecipientType // user_id | phone | email | push_token
           Recipients []string
+          TemplateRecipientData []TemplateRecipientData
           ```
 
-          **Правила:** порции добавляются до запуска; при подготовке разворачиваются в задания доставки. `recipients` обязателен для всех типов получателей. TODO: согласовать ограничения размера, идемпотентность и отдельный механизм массовой рассылки всем пользователям.
+          **Правила:** порции добавляются до запуска; при подготовке разворачиваются в задания доставки. `recipients` обязателен для всех типов получателей. Если кампания использует template, TemplateRecipientData содержит данные подстановки и ссылается только на значения из recipients. TODO: согласовать ограничения размера, идемпотентность и отдельный механизм массовой рассылки всем пользователям.
+        '''
+      }
+      inline_batch = domain 'InlineRecipientBatch' {
+        summary 'Неизменяемая аудитория inline-рассылки.'
+        description '''
+          **Поля (предварительно):**
+          ```go
+          RecipientType RecipientType // user_id | phone | email | push_token
+          Recipients []string
+          TemplateRecipientData []TemplateRecipientData
+          ```
+
+          **Правила:** хранится JSON-снимком в Campaign только при AudienceMode inline. recipients непустой; TemplateRecipientData разрешён только для template и ссылается только на значения из recipients. После создания кампании объект не меняется.
         '''
       }
       progress = domain 'CampaignProgress' {
@@ -301,13 +318,33 @@ model {
           ```go
           ID uuid.UUID
           OperatorID uuid.UUID
-          Name string
+          Key string
           ChannelType ChannelType // sms | push | email
-          Content NotificationContent
           Version int
           ```
 
-          TODO: уточнить необходимость шаблонов и их роль в сервисе.
+          **Правила:** версия шаблона содержит канонический payload с плейсхолдерами вида `{name}`. Шаблон не использует общих переменных оператора; подстановочные данные передаются для каждого адресата в кампании. Новая версия не изменяет уже созданные кампании.
+        '''
+      }
+      reference = domain 'TemplateReference' {
+        summary 'Зафиксированная версия шаблона кампании.'
+        description '''
+          ```go
+          TemplateID uuid.UUID
+          Key string
+          Version int
+          ```
+          При создании кампании key разрешается в актуальную версию и сохраняется как неизменяемая ссылка.
+        '''
+      }
+      recipient_data = domain 'TemplateRecipientData' {
+        summary 'Данные подстановки для одного адресата.'
+        description '''
+          ```go
+          Recipient string
+          Data map[string]string
+          ```
+          Recipient должен в точности совпадать с одним из значений recipients соответствующей порции. Дубли и неизвестные получатели отклоняются. При отсутствии нужной переменной сообщение получает delivery_status fail.
         '''
       }
     }
@@ -334,6 +371,8 @@ model {
   notify.domain.users.delivery_opt_out -> notify.domain.channels.application 'Относится к приложению для push'
   notify.domain.access.key -> notify.domain.access.operator 'Принадлежит оператору'
   notify.domain.templates.template -> notify.domain.access.operator 'Принадлежит оператору'
+  notify.domain.campaigns.campaign -> notify.domain.templates.reference 'Может использовать шаблон'
+  notify.domain.campaigns.batch -> notify.domain.templates.recipient_data 'Может содержать данные подстановки'
 }
 
 views {
